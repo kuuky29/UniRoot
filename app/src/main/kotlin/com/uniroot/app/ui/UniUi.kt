@@ -235,6 +235,7 @@ internal fun UniApp(
                 val editing = state.profiles.firstOrNull { it.name == editingKey }
                 ProfileEditDialog(
                     profile = editing,
+                    profiles = state.profiles,
                     onDismiss = { editingKey = null },
                     onSave = { profile, originalName ->
                         actions.onProfileSave(profile, originalName)
@@ -1096,11 +1097,13 @@ private enum class FileRole { SO, KO, KSUD, CVE_NORMAL, CVE_ROOT }
 @Composable
 private fun ProfileEditDialog(
     profile: DeviceProfile?,
+    profiles: List<DeviceProfile>,
     onDismiss: () -> Unit,
     onSave: (DeviceProfile, String?) -> Unit,
 ) {
     val context = LocalContext.current
     val stateKey = profile?.name ?: "__new__"
+    var importExpanded by remember(stateKey) { mutableStateOf(false) }
     var name by remember(stateKey) { mutableStateOf(profile?.name ?: "") }
     var kaslr by remember(stateKey) { mutableStateOf(profile?.kaslrOffset ?: "") }
     var deviceType by remember(stateKey) { mutableStateOf(profile?.deviceType ?: "samsung") }
@@ -1149,6 +1152,36 @@ private fun ProfileEditDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                TextButton(
+                    text = stringResource(R.string.import_from_profile),
+                    onClick = { importExpanded = !importExpanded },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (importExpanded) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 180.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        profiles.forEach { src ->
+                            TextButton(
+                                text = src.name,
+                                onClick = {
+                                    kaslr = src.kaslrOffset
+                                    deviceType = src.deviceType
+                                    soPath = src.pathSo
+                                    koPath = src.pathKo
+                                    ksudPath = src.pathKsud
+                                    cveNormalPath = src.pathCveNormal ?: ""
+                                    cveRootPath = src.pathCveRoot ?: ""
+                                    importExpanded = false
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
                 TextField(
                     value = kaslr,
                     onValueChange = { kaslr = it },
