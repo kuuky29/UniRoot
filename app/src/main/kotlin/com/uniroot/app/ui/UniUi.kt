@@ -1124,6 +1124,8 @@ private fun ImportProfileSheet(
         allowDismiss = true,
         onDismissRequest = onDismiss,
         content = {
+            // GhostLock LIST-dialog pattern: plain full-width TextButtons are the
+            // ONLY tap target proven to receive clicks inside miuix overlay sheets.
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1132,18 +1134,13 @@ private fun ImportProfileSheet(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(profiles, key = { it.name }) { src ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onPick(src) },
-                        insideMargin = PaddingValues(16.dp),
-                    ) {
-                        Column {
-                            Text(
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                            TextButton(
                                 text = src.name,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MiuixTheme.colorScheme.onSurface,
+                                onClick = { onPick(src) },
+                                colors = ButtonDefaults.textButtonColorsPrimary(),
+                                modifier = Modifier.fillMaxWidth(),
                             )
                             Text(
                                 text = fileSummary(src),
