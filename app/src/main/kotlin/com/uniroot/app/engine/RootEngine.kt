@@ -109,8 +109,45 @@ class RootEngine(private val context: Context) {
     // Profiles
     // ---------------------------------------------------------------------
 
+    /**
+     * Keeps the staged copies of the bundled default profiles in sync with the
+     * assets: when a new APK ships updated binaries (e.g. a rebuilt ksud), the
+     * staged files are refreshed in place. Existing profiles (incl. user edits)
+     * are preserved — only the binary files are overwritten when they differ.
+     */
+    private fun refreshBundledBinaries() {
+        val extDir = context.getExternalFilesDir(null) ?: return
+        val mapping = mapOf(
+            "s93XX" to listOf("cve.so", "kernelsu.ko", "ksud"),
+            "s25-zzhl" to listOf("cve.so", "kernelsu.ko", "ksud"),
+            "s25-zzi4" to listOf("cve.so", "kernelsu.ko", "ksud"),
+            "s25-zzi4-classic" to listOf("cve-2026-43499", "cve-2026-43499-root"),
+            "s26u-zzhk" to listOf("cve.so", "kernelsu.ko", "ksud"),
+        )
+        for ((dir, files) in mapping) {
+            for (name in files) {
+                runCatching {
+                    val asset = "profiles/$dir/$name"
+                    val staged = File(extDir, "$dir/$name")
+                    if (!staged.exists()) return@runCatching
+                    val aMd5 = context.assets.open(asset).use { input ->
+                        val md = java.security.MessageDigest.getInstance("MD5")
+                        val buf = ByteArray(8192)
+                        while (true) { val n = input.read(buf); if (n < 0) break; md.update(buf, 0, n) }
+                        md.digest().joinToString("") { "%02x".format(it) }
+                    }
+                    val sMd5 = fileMd5(staged)
+                    if (aMd5 != sMd5 && aMd5 != "?") {
+                        copyAssetToFile(asset, staged)
+                    }
+                }
+            }
+        }
+    }
+
     fun initialize() {
         installCrashHandler()
+        refreshBundledBinaries()
         loadProfiles()
         if (profiles.isEmpty()) initDefaultProfiles()
         restoreRootedState()
