@@ -46,6 +46,7 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
     private var latestKsuTag by mutableStateOf("")
     private var usePatchedKsud by mutableStateOf(false)
     private var patchedKsudName by mutableStateOf("")
+    private var autoRootOnBoot by mutableStateOf(false)
     private var rmgStatus by mutableStateOf("")
     private var tab by mutableStateOf(UniTab.UNIROOT)
     private var runLogs by mutableStateOf(listOf<RunLogFile>())
@@ -61,6 +62,7 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
         latestKsuTag = engine.latestKsuTag()
         usePatchedKsud = engine.usePatchedKsud
         patchedKsudName = engine.patchedKsudFile()?.name ?: ""
+        autoRootOnBoot = engine.autoRootOnBoot
         runLogs = engine.listRunLogs()
         refreshDevice()
         refreshProfiles()
@@ -90,6 +92,7 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
                     latestKsuTag = latestKsuTag,
                     usePatchedKsud = usePatchedKsud,
                     patchedKsudName = patchedKsudName,
+                    autoRootOnBoot = autoRootOnBoot,
                     rmgStatus = rmgStatus,
                     tab = tab,
                     runLogs = runLogs,
@@ -133,6 +136,15 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
                     override fun onUsePatchedKsudChanged(enabled: Boolean) {
                         usePatchedKsud = enabled
                         engine.usePatchedKsud = enabled
+                    }
+                    override fun onAutoRootChanged(enabled: Boolean) {
+                        autoRootOnBoot = enabled
+                        engine.autoRootOnBoot = enabled
+                        if (enabled && android.os.Build.VERSION.SDK_INT >= 33) {
+                            runCatching {
+                                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
+                            }
+                        }
                     }
                     override fun onInstallPatchedKsud(file: File) {
                         val installed = engine.installPatchedKsud(file)
@@ -278,6 +290,7 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
             shizukuEnabled = true
         }
 
+        engine.setLastRunProfile(profile.name)
         engine.clearLogs()
         sheetVisible = true
         sheetDismissible = false

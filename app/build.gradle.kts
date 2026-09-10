@@ -6,7 +6,7 @@ plugins {
 }
 
 val appName = "Uni-Root"
-val appVersionName = "3.4"
+val appVersionName = "3.5"
 
 android {
     namespace = "com.uniroot.app"

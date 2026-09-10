@@ -43,6 +43,23 @@ class RootEngine(private val context: Context) {
         get() = prefs.getBoolean("use_latest_ksu", false)
         set(value) = prefs.edit().putBoolean("use_latest_ksu", value).apply()
 
+    // ---- Auto-root on boot (additive only; the pipeline is untouched) ----
+
+    var autoRootOnBoot: Boolean
+        get() = prefs.getBoolean("auto_root_on_boot", false)
+        set(value) = prefs.edit().putBoolean("auto_root_on_boot", value).apply()
+
+    fun lastRunProfile(): String? {
+        val name = prefs.getString("last_run_profile", null) ?: return null
+        return name.takeIf { it.isNotBlank() }
+    }
+
+    fun setLastRunProfile(name: String) = prefs.edit().putString("last_run_profile", name).apply()
+
+    fun autoRootBootCount(): Int = prefs.getInt("auto_root_boot_count", -1)
+
+    fun setAutoRootBootCount(count: Int) = prefs.edit().putInt("auto_root_boot_count", count).apply()
+
     fun latestKsuTag(): String = prefs.getString("latest_ksu_tag", "") ?: ""
 
     fun setLatestKsuTag(tag: String) = prefs.edit().putString("latest_ksu_tag", tag).apply()

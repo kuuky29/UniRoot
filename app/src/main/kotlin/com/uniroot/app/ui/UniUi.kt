@@ -128,6 +128,7 @@ data class UniUiState(
     val latestKsuTag: String = "",
     val usePatchedKsud: Boolean = false,
     val patchedKsudName: String = "",
+    val autoRootOnBoot: Boolean = false,
     val rmgStatus: String = "",
     val runLogs: List<RunLogFile> = emptyList(),
     val logViewerFile: RunLogFile? = null,
@@ -149,6 +150,7 @@ interface UniActions {
     fun onDownloadLatestKsu()
     fun onUsePatchedKsudChanged(enabled: Boolean)
     fun onInstallPatchedKsud(file: File)
+    fun onAutoRootChanged(enabled: Boolean)
     fun onCheckRmg()
     fun onRunLogOpen(file: RunLogFile)
     fun onRunLogShare(file: RunLogFile)
@@ -899,6 +901,14 @@ private fun AdvancedOptions(
                     )
                 }
             }
+        }
+        Card(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+            SwitchPreference(
+                checked = state.autoRootOnBoot,
+                onCheckedChange = actions::onAutoRootChanged,
+                title = stringResource(R.string.auto_root_on_boot),
+                summary = stringResource(R.string.auto_root_on_boot_summary),
+            )
         }
         TextButton(
             text = stringResource(R.string.reset_profiles),
