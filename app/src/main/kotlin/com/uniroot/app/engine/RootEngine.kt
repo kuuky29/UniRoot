@@ -663,7 +663,16 @@ class RootEngine(private val context: Context) {
                 } else {
                     appendLog("[Shizuku] Copying to /data/local/tmp/...")
                     val ksudForRun = ksudPathForRun(profile)
-                    val stageRc = runDiagnosticCommand("cp ${profile.pathSo} /data/local/tmp/cve.so && cp /data/local/tmp/cve.so /data/local/tmp/preload.so && cp ${profile.pathKo} /data/local/tmp/kernelsu.ko && cp $ksudForRun /data/local/tmp/ksud && chmod 755 /data/local/tmp/cve.so /data/local/tmp/preload.so /data/local/tmp/ksud", true)
+                    val isNext = profile.flavor == "kernelsu_next"
+                    if (isNext) {
+                        appendLog("[KernelSU] Next ksud is all-in-one (embedded module) — no external .ko staged.")
+                        if (profile.name.startsWith("S25") || profile.name.startsWith("S93")) {
+                            appendLog("[!] Next stock modules are known to freeze Samsung KDP kernels at init — test builds only.")
+                        }
+                    }
+                    val koStage = if (isNext) "" else "cp ${profile.pathKo} /data/local/tmp/kernelsu.ko && "
+                    val stageRc = runDiagnosticCommand("cp ${profile.pathSo} /data/local/tmp/cve.so && cp /data/local/tmp/cve.so /data/local/tmp/preload.so && $koStage" +
+                        "cp $ksudForRun /data/local/tmp/ksud && chmod 755 /data/local/tmp/cve.so /data/local/tmp/preload.so /data/local/tmp/ksud", true)
                     val staged = executeCommandAndReturnOutput("ls -la /data/local/tmp/cve.so /data/local/tmp/preload.so /data/local/tmp/ksud 2>&1; md5sum /data/local/tmp/ksud 2>/dev/null", true)
                     appendLog("[Shizuku] Stage rc=$stageRc; files:\n${staged.ifBlank { "NOT VISIBLE — copy failed?" }}")
 
