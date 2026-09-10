@@ -168,6 +168,8 @@ internal fun UniApp(
     // Profile manager UI state: null = closed, "" = new profile, else the profile name.
     var profileSheetOpen by rememberSaveable { mutableStateOf(false) }
     var editingKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var importSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var pendingImport by remember { mutableStateOf<DeviceProfile?>(null) }
     MiuixTheme(
         colors = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme(),
     ) {
@@ -235,12 +237,20 @@ internal fun UniApp(
                 val editing = state.profiles.firstOrNull { it.name == editingKey }
                 ProfileEditDialog(
                     profile = editing,
-                    profiles = state.profiles,
+                    importSignal = pendingImport,
+                    onImportConsumed = { pendingImport = null },
+                    onOpenImport = { importSheetOpen = true },
                     onDismiss = { editingKey = null },
                     onSave = { profile, originalName ->
                         actions.onProfileSave(profile, originalName)
                         editingKey = null
                     },
+                )
+                ImportProfileSheet(
+                    show = importSheetOpen,
+                    profiles = state.profiles.filter { it.name != editingKey },
+                    onPick = { picked -> pendingImport = picked; importSheetOpen = false },
+                    onDismiss = { importSheetOpen = false },
                 )
             }
             state.logViewerFile?.let { entry ->
@@ -1094,16 +1104,66 @@ private fun fileSummary(profile: DeviceProfile): String {
 
 private enum class FileRole { SO, KO, KSUD, CVE_NORMAL, CVE_ROOT }
 
+/** Profile picker for the editor's "Import from an existing profile". */
+@Composable
+private fun ImportProfileSheet(
+    show: Boolean,
+    profiles: List<DeviceProfile>,
+    onPick: (DeviceProfile) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    OverlayBottomSheet(
+        show = show,
+        title = stringResource(R.string.import_from_profile),
+        allowDismiss = true,
+        onDismissRequest = onDismiss,
+        content = {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .navigationBarsPadding(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(profiles, key = { it.name }) { src ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPick(src) },
+                        insideMargin = PaddingValues(16.dp),
+                    ) {
+                        Column {
+                            Text(
+                                text = src.name,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MiuixTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = fileSummary(src),
+                                modifier = Modifier.padding(top = 4.dp),
+                                fontSize = 12.sp,
+                                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+                            )
+                        }
+                    }
+                }
+            }
+        },
+    )
+}
+
 @Composable
 private fun ProfileEditDialog(
     profile: DeviceProfile?,
-    profiles: List<DeviceProfile>,
+    importSignal: DeviceProfile?,
+    onImportConsumed: () -> Unit,
+    onOpenImport: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (DeviceProfile, String?) -> Unit,
 ) {
     val context = LocalContext.current
     val stateKey = profile?.name ?: "__new__"
-    var importExpanded by remember(stateKey) { mutableStateOf(false) }
     var name by remember(stateKey) { mutableStateOf(profile?.name ?: "") }
     var kaslr by remember(stateKey) { mutableStateOf(profile?.kaslrOffset ?: "") }
     var deviceType by remember(stateKey) { mutableStateOf(profile?.deviceType ?: "samsung") }
@@ -1113,6 +1173,19 @@ private fun ProfileEditDialog(
     var cveNormalPath by remember(stateKey) { mutableStateOf(profile?.pathCveNormal ?: "") }
     var cveRootPath by remember(stateKey) { mutableStateOf(profile?.pathCveRoot ?: "") }
     var pendingRole by remember { mutableStateOf<FileRole?>(null) }
+
+    LaunchedEffect(importSignal) {
+        importSignal?.let { src ->
+            kaslr = src.kaslrOffset
+            deviceType = src.deviceType
+            soPath = src.pathSo
+            koPath = src.pathKo
+            ksudPath = src.pathKsud
+            cveNormalPath = src.pathCveNormal ?: ""
+            cveRootPath = src.pathCveRoot ?: ""
+            onImportConsumed()
+        }
+    }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         val role = pendingRole
@@ -1145,6 +1218,12 @@ private fun ProfileEditDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                TextButton(
+                    text = stringResource(R.string.import_from_profile),
+                    onClick = onOpenImport,
+                    colors = ButtonDefaults.textButtonColorsPrimary(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 TextField(
                     value = name,
                     onValueChange = { name = it },
@@ -1152,36 +1231,6 @@ private fun ProfileEditDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                TextButton(
-                    text = stringResource(R.string.import_from_profile),
-                    onClick = { importExpanded = !importExpanded },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                if (importExpanded) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 180.dp)
-                            .verticalScroll(rememberScrollState()),
-                    ) {
-                        profiles.forEach { src ->
-                            TextButton(
-                                text = src.name,
-                                onClick = {
-                                    kaslr = src.kaslrOffset
-                                    deviceType = src.deviceType
-                                    soPath = src.pathSo
-                                    koPath = src.pathKo
-                                    ksudPath = src.pathKsud
-                                    cveNormalPath = src.pathCveNormal ?: ""
-                                    cveRootPath = src.pathCveRoot ?: ""
-                                    importExpanded = false
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
-                    }
-                }
                 TextField(
                     value = kaslr,
                     onValueChange = { kaslr = it },
