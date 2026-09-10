@@ -168,10 +168,6 @@ internal fun UniApp(
     // Profile manager UI state: null = closed, "" = new profile, else the profile name.
     var profileSheetOpen by rememberSaveable { mutableStateOf(false) }
     var editingKey by rememberSaveable { mutableStateOf<String?>(null) }
-    var importSheetOpen by rememberSaveable { mutableStateOf(false) }
-    // Files seed for the next opened dialog (import flow). The dialog is NEVER
-    // layered under the import sheet — miuix overlay windows swallow taps.
-    var importSeed by remember { mutableStateOf<DeviceProfile?>(null) }
     MiuixTheme(
         colors = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme(),
     ) {
@@ -231,34 +227,21 @@ internal fun UniApp(
                 show = profileSheetOpen,
                 profiles = state.profiles,
                 onEdit = { profile -> profileSheetOpen = false; editingKey = profile.name },
-                onNew = { profileSheetOpen = false; importSeed = null; editingKey = "" },
+                onNew = { profileSheetOpen = false; editingKey = "" },
                 onDelete = { actions.onProfileDelete(it.name) },
                 onDismiss = { profileSheetOpen = false },
             )
             if (editingKey != null) {
                 val editing = state.profiles.firstOrNull { it.name == editingKey }
-                val seed = editing ?: importSeed
                 ProfileEditDialog(
-                    profile = seed,
-                    onOpenImport = { editingKey = null; importSheetOpen = true },
+                    profile = editing,
                     onDismiss = { editingKey = null },
                     onSave = { profile, originalName ->
                         actions.onProfileSave(profile, originalName)
-                        importSeed = null
                         editingKey = null
                     },
                 )
             }
-            ImportProfileSheet(
-                show = importSheetOpen,
-                profiles = state.profiles,
-                onPick = { picked ->
-                    importSeed = picked.copy(name = "")
-                    importSheetOpen = false
-                    editingKey = "__import__"
-                },
-                onDismiss = { importSheetOpen = false },
-            )
             state.logViewerFile?.let { entry ->
                 OverlayDialog(
                     show = true,
@@ -1110,56 +1093,9 @@ private fun fileSummary(profile: DeviceProfile): String {
 
 private enum class FileRole { SO, KO, KSUD, CVE_NORMAL, CVE_ROOT }
 
-/** Profile picker for the editor's "Import from an existing profile". */
-@Composable
-private fun ImportProfileSheet(
-    show: Boolean,
-    profiles: List<DeviceProfile>,
-    onPick: (DeviceProfile) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    OverlayBottomSheet(
-        show = show,
-        title = stringResource(R.string.import_from_profile),
-        allowDismiss = true,
-        onDismissRequest = onDismiss,
-        content = {
-            // GhostLock LIST-dialog pattern: plain full-width TextButtons are the
-            // ONLY tap target proven to receive clicks inside miuix overlay sheets.
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 420.dp)
-                    .navigationBarsPadding(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(profiles, key = { it.name }) { src ->
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-                            TextButton(
-                                text = src.name,
-                                onClick = { onPick(src) },
-                                colors = ButtonDefaults.textButtonColorsPrimary(),
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            Text(
-                                text = fileSummary(src),
-                                modifier = Modifier.padding(top = 4.dp),
-                                fontSize = 12.sp,
-                                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.68f),
-                            )
-                        }
-                    }
-                }
-            }
-        },
-    )
-}
-
 @Composable
 private fun ProfileEditDialog(
     profile: DeviceProfile?,
-    onOpenImport: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (DeviceProfile, String?) -> Unit,
 ) {
@@ -1206,12 +1142,6 @@ private fun ProfileEditDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                TextButton(
-                    text = stringResource(R.string.import_from_profile),
-                    onClick = onOpenImport,
-                    colors = ButtonDefaults.textButtonColorsPrimary(),
-                    modifier = Modifier.fillMaxWidth(),
-                )
                 TextField(
                     value = name,
                     onValueChange = { name = it },

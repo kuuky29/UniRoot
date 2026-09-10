@@ -58,7 +58,6 @@
     <string name="field_cve_normal">CVE helper, normal (optional)</string>
     <string name="field_cve_root">CVE helper, root (optional)</string>
     <string name="choose_file">Choose…</string>
-    <string name="import_from_profile">Import from an existing profile…</string>
     <string name="no_file">Bundled default</string>
     <string name="pick_failed">Could not import the selected file</string>
 
