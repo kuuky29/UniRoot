@@ -222,12 +222,9 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
      * re-reads the freshly loaded module, then bring it back up.
      */
     private fun restartKsuManager() {
-        // The relaunched manager must match the root ACTUALLY loaded:
-        // only the S26 Next build ships a KDP-patched KernelSU-Next module today;
-        // the S25/S93 "Next" profiles stage a build whose 15-6.6 module is classic.
-        val lastProfile = engine.lastRunProfile().orEmpty()
-        val nextManager = if (ksuNextMode) lastProfile.startsWith("S26") else false
-        val (installed, pkg) = engine.isKsuManagerInstalled(nextManager)
+        // Next flavor ships real KernelSU-Next builds everywhere
+        // (S25: our custom KDP build, S26: the advisor's build).
+        val (installed, pkg) = engine.isKsuManagerInstalled(ksuNextMode)
         if (!installed) {
             Toast.makeText(this, R.string.manager_not_installed, Toast.LENGTH_LONG).show()
             return
