@@ -55,15 +55,26 @@ class RootEngine(private val context: Context) {
         get() = prefs.getBoolean("use_patched_ksud", false)
         set(value) = prefs.edit().putBoolean("use_patched_ksud", value).apply()
 
+    // IMPORTANT: stored on the EXTERNAL app dir — the Shizuku staging `cp` runs as
+    // shell (uid 2000), which cannot read the app's private internal storage.
     fun patchedKsudFile(): File? =
-        File(File(context.filesDir, "bin"), "ksud-test").takeIf { it.exists() }
+        File(context.getExternalFilesDir(null), "ksud-test").takeIf { it.exists() }
 
     fun installPatchedKsud(src: File): File? = runCatching {
-        val dest = File(File(context.filesDir, "bin").apply { mkdirs() }, "ksud-test")
+        val dest = File(context.getExternalFilesDir(null), "ksud-test")
         src.inputStream().use { i -> FileOutputStream(dest).use { o -> i.copyTo(o) } }
         dest.setReadable(true, false); dest.setExecutable(true, false)
         dest
     }.getOrNull()
+
+    fun fileMd5(f: File): String = runCatching {
+        val md = java.security.MessageDigest.getInstance("MD5")
+        f.inputStream().use { input ->
+            val buf = ByteArray(8192)
+            while (true) { val n = input.read(buf); if (n < 0) break; md.update(buf, 0, n) }
+        }
+        md.digest().joinToString("") { "%02x".format(it) }
+    }.getOrDefault("?")
 
     /** ksud actually staged for this run (patched test build when enabled). */
     fun ksudPathForRun(profile: DeviceProfile, quiet: Boolean = false): String {
@@ -73,7 +84,7 @@ class RootEngine(private val context: Context) {
             if (!quiet) appendLog("[!] Patched ksud enabled but no file installed — using the profile ksud.")
             return profile.pathKsud
         }
-        if (!quiet) appendLog("[KernelSU] Using PATCHED ksud (test): ${patched.name}")
+        if (!quiet) appendLog("[KernelSU] Using PATCHED ksud (test): ${patched.name} md5=${fileMd5(patched)}")
         return patched.absolutePath
     }
 
@@ -570,7 +581,7 @@ class RootEngine(private val context: Context) {
                     appendLog("[Shizuku] Copying to /data/local/tmp/...")
                     val ksudForRun = ksudPathForRun(profile)
                     val stageRc = runDiagnosticCommand("cp ${profile.pathSo} /data/local/tmp/cve.so && cp /data/local/tmp/cve.so /data/local/tmp/preload.so && cp ${profile.pathKo} /data/local/tmp/kernelsu.ko && cp $ksudForRun /data/local/tmp/ksud && chmod 755 /data/local/tmp/cve.so /data/local/tmp/preload.so /data/local/tmp/ksud", true)
-                    val staged = executeCommandAndReturnOutput("ls -la /data/local/tmp/cve.so /data/local/tmp/preload.so /data/local/tmp/ksud 2>&1", true)
+                    val staged = executeCommandAndReturnOutput("ls -la /data/local/tmp/cve.so /data/local/tmp/preload.so /data/local/tmp/ksud 2>&1; md5sum /data/local/tmp/ksud 2>/dev/null", true)
                     appendLog("[Shizuku] Stage rc=$stageRc; files:\n${staged.ifBlank { "NOT VISIBLE — copy failed?" }}")
 
                     // Le build APP du payload exige CVE43499_ROOT_HELPER (chemin absolu
@@ -764,7 +775,7 @@ class RootEngine(private val context: Context) {
 
                 if (success) {
                     appendLog("[Success] Root acquired!")
-                    val ksudPath = File(profile.pathKsud).absolutePath
+                    val ksudPath = ksudPathForRun(profile)
                     val koPath = File(profile.pathKo).absolutePath
                     appendLog("[Daemon] Preparing ksud...")
                     val stageCmd = "/system/bin/mkdir -p /data/adb && /system/bin/cp $ksudPath /data/local/tmp/ksud-s25u-kdp && /system/bin/cp $ksudPath /data/local/tmp/.ksud-stage && /system/bin/cp $koPath /data/local/tmp/kernelsu.ko && /system/bin/chmod 755 /data/local/tmp/ksud-s25u-kdp /data/local/tmp/.ksud-stage"

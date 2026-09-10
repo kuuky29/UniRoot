@@ -19,7 +19,7 @@ android {
         applicationId = "com.example.universalsystemporter"
         minSdk = 31
         targetSdk = 37
-        versionCode = 34
+        versionCode = 35
         versionName = appVersionName
     }
     buildTypes {
