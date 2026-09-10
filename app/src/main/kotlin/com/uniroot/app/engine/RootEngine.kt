@@ -47,6 +47,36 @@ class RootEngine(private val context: Context) {
 
     fun setLatestKsuTag(tag: String) = prefs.edit().putString("latest_ksu_tag", tag).apply()
 
+    /**
+     * Patched ksud for testing (e.g. the Samsung DEFEX/KDP build for the S26U):
+     * off by default — the pipeline then uses the profile's validated ksud.
+     */
+    var usePatchedKsud: Boolean
+        get() = prefs.getBoolean("use_patched_ksud", false)
+        set(value) = prefs.edit().putBoolean("use_patched_ksud", value).apply()
+
+    fun patchedKsudFile(): File? =
+        File(File(context.filesDir, "bin"), "ksud-test").takeIf { it.exists() }
+
+    fun installPatchedKsud(src: File): File? = runCatching {
+        val dest = File(File(context.filesDir, "bin").apply { mkdirs() }, "ksud-test")
+        src.inputStream().use { i -> FileOutputStream(dest).use { o -> i.copyTo(o) } }
+        dest.setReadable(true, false); dest.setExecutable(true, false)
+        dest
+    }.getOrNull()
+
+    /** ksud actually staged for this run (patched test build when enabled). */
+    fun ksudPathForRun(profile: DeviceProfile, quiet: Boolean = false): String {
+        if (!usePatchedKsud) return profile.pathKsud
+        val patched = patchedKsudFile()
+        if (patched == null) {
+            if (!quiet) appendLog("[!] Patched ksud enabled but no file installed — using the profile ksud.")
+            return profile.pathKsud
+        }
+        if (!quiet) appendLog("[KernelSU] Using PATCHED ksud (test): ${patched.name}")
+        return patched.absolutePath
+    }
+
     // ---------------------------------------------------------------------
     // Profiles
     // ---------------------------------------------------------------------
@@ -56,6 +86,7 @@ class RootEngine(private val context: Context) {
         loadProfiles()
         if (profiles.isEmpty()) initDefaultProfiles()
         restoreRootedState()
+        recoverInterruptedRuns()
         lastCrash()?.let { appendLog("[!] Previous run CRASHED (app):"); it.lineSequence().take(12).forEach { appendLog("    $it") } }
     }
 
@@ -197,26 +228,76 @@ class RootEngine(private val context: Context) {
     // Run logs (Root My Galaxy style boxes, shareable .txt)
     // ---------------------------------------------------------------------
 
-    fun saveRunLog(status: String, profileName: String, durationMs: Long) {
+    // ------------------------------------------------------------------
+    // Run logs: RMG-style persistence. The box exists from the START of the
+    // run ("Running") and every log line is appended live, so a crash or an
+    // unexpected reboot still leaves a complete Failed box behind.
+    // ------------------------------------------------------------------
+
+    private var activeRunStamp: String? = null
+    private var activeRunProfile: String = ""
+
+    private val runLogsDir: File get() = File(context.filesDir, "run-logs").apply { mkdirs() }
+
+    private fun stampNow(): String =
+        java.text.SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", java.util.Locale.US).format(java.util.Date())
+
+    private fun runLogFile(stamp: String, status: String): File =
+        File(runLogsDir, "${stamp}_${status.replace(Regex("[^A-Za-z]"), "-")}.txt")
+
+    private fun runLogHeader(stamp: String, status: String, profileName: String, durationMs: Long): String = buildString {
+        val info = detectDevice()
+        appendLine("Uni-Root run log")
+        appendLine("Date:     ${stamp.replace('_', ' ')}")
+        appendLine("Result:   $status")
+        appendLine("Duration: ${durationMs / 1000}s")
+        appendLine("Profile:  $profileName")
+        appendLine("Device:   ${info.model}")
+        appendLine("Kernel:   ${info.kernel}")
+        appendLine("==========================================")
+    }
+
+    fun beginRunLog(profileName: String) {
+        val stamp = stampNow()
+        activeRunStamp = stamp
+        activeRunProfile = profileName
+        runCatching { runLogFile(stamp, "Running").writeText(runLogHeader(stamp, "Running", profileName, 0)) }
+    }
+
+    private fun appendToActiveRunLog(lines: List<String>) {
+        val stamp = activeRunStamp ?: return
+        runCatching { runLogFile(stamp, "Running").appendText(lines.joinToString("\n", postfix = "\n")) }
+    }
+
+    fun endRunLog(status: String, profileName: String, durationMs: Long) {
+        val stamp = activeRunStamp
+        activeRunStamp = null
         runCatching {
-            val dir = File(context.filesDir, "run-logs").apply { mkdirs() }
-            val stamp = java.text.SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", java.util.Locale.US).format(java.util.Date())
-            val safeStatus = status.replace(Regex("[^A-Za-z]"), "-")
-            val file = File(dir, "${stamp}_${safeStatus}.txt")
-            val info = detectDevice()
-            val header = buildString {
-                appendLine("Uni-Root run log")
-                appendLine("Date:     ${stamp.replace('_', ' ')}")
-                appendLine("Result:   $status")
-                appendLine("Duration: ${durationMs / 1000}s")
-                appendLine("Profile:  $profileName")
-                appendLine("Device:   ${info.model}")
-                appendLine("Kernel:   ${info.kernel}")
-                appendLine("==========================================")
-            }
-            file.writeText(header + _logLines.value.joinToString("\n") + "\n")
+            stamp?.let { runLogFile(it, "Running").delete() }
+            val finalStamp = stamp ?: stampNow()
+            runLogFile(finalStamp, status).writeText(
+                runLogHeader(finalStamp, status, profileName, durationMs) + _logLines.value.joinToString("\n") + "\n")
             // keep the 30 most recent boxes only
-            dir.listFiles { f -> f.extension == "txt" }?.sortedByDescending { it.name }?.drop(30)?.forEach { it.delete() }
+            runLogsDir.listFiles { f -> f.extension == "txt" }?.sortedByDescending { it.name }?.drop(30)?.forEach { it.delete() }
+        }
+    }
+
+    /** Fallback for exceptions thrown outside the pipeline: no duplicate box. */
+    fun abandonActiveRunLog() {
+        val stamp = activeRunStamp ?: return
+        activeRunStamp = null
+        endRunLog("Failed", activeRunProfile, 0)
+        runCatching { runLogFile(stamp, "Running").delete() }
+    }
+
+    /** Root My Galaxy closeInterruptedRuns: a box left "Running" means a crash/reboot. */
+    fun recoverInterruptedRuns() {
+        runCatching {
+            runLogsDir.listFiles { f -> f.name.endsWith("_Running.txt") }?.forEach { f ->
+                val stamp = f.name.substringBeforeLast('_')
+                val content = f.readText().replaceFirst("Result:   Running", "Result:   Failed (interrupted)")
+                if (f.delete()) File(runLogsDir, "${stamp}_Failed-Interrupted.txt").writeText(content)
+            }
         }
     }
 
@@ -322,6 +403,7 @@ class RootEngine(private val context: Context) {
         if (lines.isEmpty()) return
         _logLines.value = _logLines.value + lines
         runCatching { File(context.filesDir, "current_run.log").appendText(lines.joinToString("\n", postfix = "\n")) }
+        appendToActiveRunLog(lines)
     }
 
     fun clearLogs() { _logLines.value = emptyList(); runCatching { File(context.filesDir, "current_run.log").delete() } }
@@ -407,6 +489,7 @@ class RootEngine(private val context: Context) {
         appendLog("==========================================")
         appendLog("[Pipeline] Start for \"${rawProfile.name}\"")
         val runStartedAt = System.currentTimeMillis()
+        beginRunLog(rawProfile.name)
 
         var profile = rawProfile
 
@@ -479,13 +562,14 @@ class RootEngine(private val context: Context) {
                     val cveRootPath = "/data/local/tmp/cve-2026-43499-root"
                     
                     runDiagnosticCommand("cp ${profile.pathCveNormal} $cveNormalPath && cp ${profile.pathCveRoot} $cveRootPath && chmod 755 $cveNormalPath $cveRootPath", true)
-                    runDiagnosticCommand("cp ${profile.pathKsud} /data/local/tmp/ksud && cp ${profile.pathKo} /data/local/tmp/kernelsu.ko && chmod 755 /data/local/tmp/ksud", true)
+                    runDiagnosticCommand("cp ${ksudPathForRun(profile)} /data/local/tmp/ksud && cp ${profile.pathKo} /data/local/tmp/kernelsu.ko && chmod 755 /data/local/tmp/ksud", true)
                     
                     appendLog("[Exploit] Launching via LD_PRELOAD (Shell UID 2000)...")
                     launchCmd = "LD_PRELOAD=$cveNormalPath /system/bin/true > $logFilePath 2>&1 &"
                 } else {
                     appendLog("[Shizuku] Copying to /data/local/tmp/...")
-                    val stageRc = runDiagnosticCommand("cp ${profile.pathSo} /data/local/tmp/cve.so && cp /data/local/tmp/cve.so /data/local/tmp/preload.so && cp ${profile.pathKo} /data/local/tmp/kernelsu.ko && cp ${profile.pathKsud} /data/local/tmp/ksud && chmod 755 /data/local/tmp/cve.so /data/local/tmp/preload.so /data/local/tmp/ksud", true)
+                    val ksudForRun = ksudPathForRun(profile)
+                    val stageRc = runDiagnosticCommand("cp ${profile.pathSo} /data/local/tmp/cve.so && cp /data/local/tmp/cve.so /data/local/tmp/preload.so && cp ${profile.pathKo} /data/local/tmp/kernelsu.ko && cp $ksudForRun /data/local/tmp/ksud && chmod 755 /data/local/tmp/cve.so /data/local/tmp/preload.so /data/local/tmp/ksud", true)
                     val staged = executeCommandAndReturnOutput("ls -la /data/local/tmp/cve.so /data/local/tmp/preload.so /data/local/tmp/ksud 2>&1", true)
                     appendLog("[Shizuku] Stage rc=$stageRc; files:\n${staged.ifBlank { "NOT VISIBLE — copy failed?" }}")
 
@@ -542,6 +626,17 @@ class RootEngine(private val context: Context) {
                     if (currentLog.contains("F_SETPIPE_SZ") && currentLog.contains("Operation not permitted") && !epermSeen) {
                         epermSeen = true
                         appendLog("[!] F_SETPIPE_SZ EPERM seen (pipe page pressure) — payload retries internally.")
+                    }
+                    // Procédure validée (SAVE S26U) : UN run par boot. Si le payload
+                    // a déjà raté 8 tentatives internes sur CE boot, relancer ne sert
+                    // à rien (l'état slab/pipe est contaminé) : on stoppe net.
+                    val internalFail = Regex("pipe flag phase: attempt (\\d+) failed").findAll(currentLog)
+                        .maxOfOrNull { it.groupValues[1].toIntOrNull() ?: 0 } ?: 0
+                    if (internalFail >= 8 && !success) {
+                        appendLog("[!] $internalFail internal attempts failed on this boot — stopping (validated procedure: ONE run per boot).")
+                        appendLog("[!] REBOOT the phone, then run ONCE.")
+                        finalStatus = "Reboot required"
+                        break
                     }
                     if (currentLog.contains("failed") || currentLog.contains("[-] exploit")) { finalStatus = "Failed" }
                     
@@ -701,7 +796,7 @@ class RootEngine(private val context: Context) {
         
         if (finalStatus == "Success") markRooted(rawProfile.name)
         // Root My Galaxy style: every run lands in a shareable .txt box.
-        saveRunLog(finalStatus, rawProfile.name, System.currentTimeMillis() - runStartedAt)
+        endRunLog(finalStatus, rawProfile.name, System.currentTimeMillis() - runStartedAt)
         return finalStatus
     }
 }

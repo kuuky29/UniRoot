@@ -126,6 +126,8 @@ data class UniUiState(
     val tab: UniTab = UniTab.UNIROOT,
     val useLatestKsu: Boolean = false,
     val latestKsuTag: String = "",
+    val usePatchedKsud: Boolean = false,
+    val patchedKsudName: String = "",
     val rmgStatus: String = "",
     val runLogs: List<RunLogFile> = emptyList(),
     val logViewerFile: RunLogFile? = null,
@@ -145,6 +147,8 @@ interface UniActions {
     fun onProfileDelete(name: String)
     fun onUseLatestKsuChanged(enabled: Boolean)
     fun onDownloadLatestKsu()
+    fun onUsePatchedKsudChanged(enabled: Boolean)
+    fun onInstallPatchedKsud(file: File)
     fun onCheckRmg()
     fun onRunLogOpen(file: RunLogFile)
     fun onRunLogShare(file: RunLogFile)
@@ -487,6 +491,7 @@ private fun RunLogBox(
         "failed" -> Color(0xFFFF6B6B) to "Failed"
         "crash" -> Color(0xFFF5A623) to "Crash"
         "reboot-required" -> Color(0xFF60A5FA) to "Reboot required"
+        "failed-interrupted" -> Color(0xFFFF9F6B) to "Failed (interrupted)"
         else -> Color(0xFFD1D5DB) to entry.status
     }
     Card(modifier = modifier) {
@@ -858,6 +863,38 @@ private fun AdvancedOptions(
                     TextButton(
                         text = stringResource(R.string.download_latest_ksu),
                         onClick = actions::onDownloadLatestKsu,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
+                }
+            }
+        }
+        Card(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+            Column {
+                SwitchPreference(
+                    checked = state.usePatchedKsud,
+                    onCheckedChange = actions::onUsePatchedKsudChanged,
+                    title = stringResource(R.string.use_patched_ksud),
+                    summary = stringResource(R.string.use_patched_ksud_summary),
+                )
+                if (state.usePatchedKsud) {
+                    val context = LocalContext.current
+                    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+                        if (uri != null) {
+                            val f = copyPickedFile(context, uri, prefix = "ksud-test")
+                            if (f == null) Toast.makeText(context, R.string.pick_failed, Toast.LENGTH_SHORT).show()
+                            else actions.onInstallPatchedKsud(f)
+                        }
+                    }
+                    Text(
+                        text = if (state.patchedKsudName.isEmpty()) stringResource(R.string.patched_ksud_none)
+                        else stringResource(R.string.patched_ksud_set, state.patchedKsudName),
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp),
+                        fontSize = 13.sp,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+                    )
+                    TextButton(
+                        text = stringResource(R.string.patched_ksud_choose),
+                        onClick = { picker.launch("*/*") },
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     )
                 }

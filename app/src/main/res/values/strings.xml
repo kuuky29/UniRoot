@@ -67,6 +67,12 @@
     <string name="use_latest_not_downloaded">No binaries downloaded yet.</string>
     <string name="use_latest_downloaded">Downloaded: %1$s (used by Root now while this option is on)</string>
     <string name="download_latest_ksu">Download latest binaries now</string>
+    <string name="use_patched_ksud">Use patched ksud (test)</string>
+    <string name="use_patched_ksud_summary">Off by default. When on, the pipeline stages the patched test ksud (e.g. the Samsung DEFEX/KDP build for the S26 Ultra) instead of the profile one.</string>
+    <string name="patched_ksud_none">No patched ksud installed yet.</string>
+    <string name="patched_ksud_set">Patched ksud: %1$s</string>
+    <string name="patched_ksud_choose">Choose patched ksud file…</string>
+    <string name="patched_ksud_installed">Patched ksud installed</string>
     <string name="use_latest_enabled_toast">The next run will use the downloaded binaries if available. Use the download button to fetch them.</string>
 
     <!-- Embedded KernelSU manager -->

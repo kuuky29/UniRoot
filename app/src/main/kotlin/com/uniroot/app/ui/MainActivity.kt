@@ -44,6 +44,8 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
 
     private var useLatestKsu by mutableStateOf(false)
     private var latestKsuTag by mutableStateOf("")
+    private var usePatchedKsud by mutableStateOf(false)
+    private var patchedKsudName by mutableStateOf("")
     private var rmgStatus by mutableStateOf("")
     private var tab by mutableStateOf(UniTab.UNIROOT)
     private var runLogs by mutableStateOf(listOf<RunLogFile>())
@@ -57,6 +59,8 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
         Shizuku.addRequestPermissionResultListener(this)
         useLatestKsu = engine.useLatestKsu
         latestKsuTag = engine.latestKsuTag()
+        usePatchedKsud = engine.usePatchedKsud
+        patchedKsudName = engine.patchedKsudFile()?.name ?: ""
         runLogs = engine.listRunLogs()
         refreshDevice()
         refreshProfiles()
@@ -84,6 +88,8 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
                     logLines = logs,
                     useLatestKsu = useLatestKsu,
                     latestKsuTag = latestKsuTag,
+                    usePatchedKsud = usePatchedKsud,
+                    patchedKsudName = patchedKsudName,
                     rmgStatus = rmgStatus,
                     tab = tab,
                     runLogs = runLogs,
@@ -124,6 +130,16 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
                         }
                     }
                     override fun onDownloadLatestKsu() = downloadLatestKsu()
+                    override fun onUsePatchedKsudChanged(enabled: Boolean) {
+                        usePatchedKsud = enabled
+                        engine.usePatchedKsud = enabled
+                    }
+                    override fun onInstallPatchedKsud(file: File) {
+                        val installed = engine.installPatchedKsud(file)
+                        runCatching { file.delete() }
+                        patchedKsudName = installed?.name ?: ""
+                        Toast.makeText(context, if (installed != null) R.string.patched_ksud_installed else R.string.pick_failed, Toast.LENGTH_SHORT).show()
+                    }
                     override fun onCheckRmg() = checkRootMyGalaxy(silent = false)
                     override fun onRunLogOpen(file: RunLogFile) {
                         logViewerContent = runCatching { file.file.readText() }.getOrDefault("")
@@ -287,7 +303,7 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
                 // Nothing may fail silently: any exception lands in the visible log.
                 engine.appendLog("[Error] Unexpected: ${e.javaClass.simpleName}: ${e.message}")
                 android.util.Log.e("UniRoot", "pipeline failed", e)
-                runCatching { engine.saveRunLog("Failed", profile.name, 0) }
+                runCatching { engine.abandonActiveRunLog() }
                 runLogs = engine.listRunLogs()
             } finally {
                 engine.setRunning(false)
