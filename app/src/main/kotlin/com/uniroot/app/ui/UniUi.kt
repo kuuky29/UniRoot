@@ -169,7 +169,9 @@ internal fun UniApp(
     var profileSheetOpen by rememberSaveable { mutableStateOf(false) }
     var editingKey by rememberSaveable { mutableStateOf<String?>(null) }
     var importSheetOpen by rememberSaveable { mutableStateOf(false) }
-    var pendingImport by remember { mutableStateOf<DeviceProfile?>(null) }
+    // Files seed for the next opened dialog (import flow). The dialog is NEVER
+    // layered under the import sheet — miuix overlay windows swallow taps.
+    var importSeed by remember { mutableStateOf<DeviceProfile?>(null) }
     MiuixTheme(
         colors = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme(),
     ) {
@@ -229,30 +231,34 @@ internal fun UniApp(
                 show = profileSheetOpen,
                 profiles = state.profiles,
                 onEdit = { profile -> profileSheetOpen = false; editingKey = profile.name },
-                onNew = { profileSheetOpen = false; editingKey = "" },
+                onNew = { profileSheetOpen = false; importSeed = null; editingKey = "" },
                 onDelete = { actions.onProfileDelete(it.name) },
                 onDismiss = { profileSheetOpen = false },
             )
             if (editingKey != null) {
                 val editing = state.profiles.firstOrNull { it.name == editingKey }
+                val seed = editing ?: importSeed
                 ProfileEditDialog(
-                    profile = editing,
-                    importSignal = pendingImport,
-                    onImportConsumed = { pendingImport = null },
-                    onOpenImport = { importSheetOpen = true },
+                    profile = seed,
+                    onOpenImport = { editingKey = null; importSheetOpen = true },
                     onDismiss = { editingKey = null },
                     onSave = { profile, originalName ->
                         actions.onProfileSave(profile, originalName)
+                        importSeed = null
                         editingKey = null
                     },
                 )
-                ImportProfileSheet(
-                    show = importSheetOpen,
-                    profiles = state.profiles.filter { it.name != editingKey },
-                    onPick = { picked -> pendingImport = picked; importSheetOpen = false },
-                    onDismiss = { importSheetOpen = false },
-                )
             }
+            ImportProfileSheet(
+                show = importSheetOpen,
+                profiles = state.profiles,
+                onPick = { picked ->
+                    importSeed = picked.copy(name = "")
+                    importSheetOpen = false
+                    editingKey = "__import__"
+                },
+                onDismiss = { importSheetOpen = false },
+            )
             state.logViewerFile?.let { entry ->
                 OverlayDialog(
                     show = true,
@@ -1156,8 +1162,6 @@ private fun ImportProfileSheet(
 @Composable
 private fun ProfileEditDialog(
     profile: DeviceProfile?,
-    importSignal: DeviceProfile?,
-    onImportConsumed: () -> Unit,
     onOpenImport: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (DeviceProfile, String?) -> Unit,
@@ -1173,19 +1177,6 @@ private fun ProfileEditDialog(
     var cveNormalPath by remember(stateKey) { mutableStateOf(profile?.pathCveNormal ?: "") }
     var cveRootPath by remember(stateKey) { mutableStateOf(profile?.pathCveRoot ?: "") }
     var pendingRole by remember { mutableStateOf<FileRole?>(null) }
-
-    LaunchedEffect(importSignal) {
-        importSignal?.let { src ->
-            kaslr = src.kaslrOffset
-            deviceType = src.deviceType
-            soPath = src.pathSo
-            koPath = src.pathKo
-            ksudPath = src.pathKsud
-            cveNormalPath = src.pathCveNormal ?: ""
-            cveRootPath = src.pathCveRoot ?: ""
-            onImportConsumed()
-        }
-    }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         val role = pendingRole
