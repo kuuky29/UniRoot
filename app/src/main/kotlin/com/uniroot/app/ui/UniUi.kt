@@ -130,6 +130,7 @@ data class UniUiState(
     val patchedKsudName: String = "",
     val autoRootOnBoot: Boolean = false,
     val rmgStatus: String = "",
+    val ksuNextMode: Boolean = false,
     val runLogs: List<RunLogFile> = emptyList(),
     val logViewerFile: RunLogFile? = null,
     val logViewerContent: String = "",
@@ -143,6 +144,7 @@ interface UniActions {
     fun onCopyLogs()
     fun onProfileSelected(index: Int)
     fun onShizukuChanged(enabled: Boolean)
+    fun onKsuFlavorChanged(next: Boolean)
     fun onResetProfiles()
     fun onProfileSave(profile: DeviceProfile, originalName: String?)
     fun onProfileDelete(name: String)
@@ -557,6 +559,11 @@ private fun ControlPanel(
             kernelRelease = state.kernelRelease,
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
         )
+        FlavorSwitch(
+            next = state.ksuNextMode,
+            onSelect = actions::onKsuFlavorChanged,
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        )
         if (state.profiles.isNotEmpty()) {
             Card(modifier = modifier.padding(top = 12.dp)) {
                 OverlaySpinnerPreference(
@@ -586,6 +593,42 @@ private fun ControlPanel(
                 actions = actions,
                 onOpenProfileSheet = onOpenProfileSheet,
             )
+        }
+    }
+}
+
+/** Home-page switch: KernelSU <-> KernelSU Next (drives the visible profile set). */
+@Composable
+private fun FlavorSwitch(
+    next: Boolean,
+    onSelect: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        val entries = listOf(
+            false to stringResource(R.string.flavor_kernelsu),
+            true to stringResource(R.string.flavor_ksunext),
+        )
+        for ((isNext, label) in entries) {
+            val selected = isNext == next
+            val bg = if (selected) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.primary.copy(alpha = 0.08f)
+            val fg = if (selected) {
+                if (isSystemInDarkTheme()) Color(0xFF0B1220) else Color.White
+            } else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(bg)
+                    .clickable { onSelect(isNext) }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text = label, color = fg, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            }
         }
     }
 }
@@ -1201,6 +1244,7 @@ private fun ProfileEditDialog(
                                 deviceType = deviceType,
                                 pathCveNormal = cveNormalPath.ifBlank { null },
                                 pathCveRoot = cveRootPath.ifBlank { null },
+                                flavor = profile?.flavor ?: "kernelsu",
                             )
                             onSave(updated, profile?.name)
                         },

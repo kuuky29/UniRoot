@@ -1,0 +1,2 @@
+Placeholder : le module KernelSU est embarque dans le ksud de ce profil
+(charge en late-load par le ROOT_STAGE du preload). Ce fichier nest pas utilise.

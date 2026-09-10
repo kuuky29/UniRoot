@@ -47,6 +47,7 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
     private var usePatchedKsud by mutableStateOf(false)
     private var patchedKsudName by mutableStateOf("")
     private var autoRootOnBoot by mutableStateOf(false)
+    private var ksuNextMode by mutableStateOf(false)
     private var rmgStatus by mutableStateOf("")
     private var tab by mutableStateOf(UniTab.UNIROOT)
     private var runLogs by mutableStateOf(listOf<RunLogFile>())
@@ -63,6 +64,7 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
         usePatchedKsud = engine.usePatchedKsud
         patchedKsudName = engine.patchedKsudFile()?.name ?: ""
         autoRootOnBoot = engine.autoRootOnBoot
+        ksuNextMode = engine.ksuFlavor == "kernelsu_next"
         runLogs = engine.listRunLogs()
         refreshDevice()
         refreshProfiles()
@@ -94,6 +96,7 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
                     patchedKsudName = patchedKsudName,
                     autoRootOnBoot = autoRootOnBoot,
                     rmgStatus = rmgStatus,
+                    ksuNextMode = ksuNextMode,
                     tab = tab,
                     runLogs = runLogs,
                     logViewerFile = logViewerFile,
@@ -110,6 +113,11 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
                         autoMatched = false
                     }
                     override fun onShizukuChanged(enabled: Boolean) { shizukuEnabled = enabled }
+                    override fun onKsuFlavorChanged(next: Boolean) {
+                        ksuNextMode = next
+                        engine.ksuFlavor = if (next) "kernelsu_next" else "kernelsu"
+                        refreshProfiles()
+                    }
                     override fun onResetProfiles() = resetProfiles()
                     override fun onProfileSave(profile: DeviceProfile, originalName: String?) {
                         engine.addOrUpdateProfile(profile, originalName)
@@ -191,10 +199,12 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
     }
 
     private fun refreshProfiles() {
-        profiles = engine.profiles.toList()
-        if (selectedProfileName == null || engine.profileByName(selectedProfileName) == null) {
+        val flavor = if (ksuNextMode) "kernelsu_next" else "kernelsu"
+        val suffix = if (ksuNextMode) " Next" else ""
+        profiles = engine.profiles.filter { it.flavor == flavor }
+        if (selectedProfileName == null || profiles.none { it.name == selectedProfileName }) {
             selectedProfileName = engine.detectDevice().matchedProfileName
-                ?.takeIf { engine.profileByName(it) != null }
+                ?.let { matched -> engine.profileByName(matched + suffix)?.name ?: engine.profileByName(matched)?.name }
                 ?: profiles.firstOrNull { it.name.startsWith("RMG · ") }?.name
         }
     }
@@ -212,7 +222,7 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
      * re-reads the freshly loaded module, then bring it back up.
      */
     private fun restartKsuManager() {
-        val (installed, pkg) = engine.isKsuManagerInstalled()
+        val (installed, pkg) = engine.isKsuManagerInstalled(ksuNextMode)
         if (!installed) {
             Toast.makeText(this, R.string.manager_not_installed, Toast.LENGTH_LONG).show()
             return

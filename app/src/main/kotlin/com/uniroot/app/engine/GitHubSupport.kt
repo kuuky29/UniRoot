@@ -78,6 +78,7 @@ class GitHubSupport(private val context: Context) {
             deviceType = "samsung",
             pathCveNormal = null,
             pathCveRoot = null,
+            flavor = "kernelsu",
         )
     }
 

@@ -2,7 +2,9 @@ package com.uniroot.app.engine
 
 data class DeviceProfile(
     val name: String, val kaslrOffset: String, val pathSo: String, val pathKo: String, val pathKsud: String,
-    val deviceType: String, val pathCveNormal: String?, val pathCveRoot: String?
+    val deviceType: String, val pathCveNormal: String?, val pathCveRoot: String?,
+    /** "kernelsu" (default) or "kernelsu_next" — drives the home-page switch + manager relaunch. */
+    val flavor: String = "kernelsu",
 )
 
 data class DeviceInfo(

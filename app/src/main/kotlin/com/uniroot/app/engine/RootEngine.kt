@@ -60,6 +60,11 @@ class RootEngine(private val context: Context) {
 
     fun setAutoRootBootCount(count: Int) = prefs.edit().putInt("auto_root_boot_count", count).apply()
 
+    /** Home-page switch: "kernelsu" (default) or "kernelsu_next". */
+    var ksuFlavor: String
+        get() = prefs.getString("ksu_flavor", "kernelsu") ?: "kernelsu"
+        set(value) = prefs.edit().putString("ksu_flavor", value).apply()
+
     fun latestKsuTag(): String = prefs.getString("latest_ksu_tag", "") ?: ""
 
     fun setLatestKsuTag(tag: String) = prefs.edit().putString("latest_ksu_tag", tag).apply()
@@ -123,6 +128,10 @@ class RootEngine(private val context: Context) {
             "s25-zzi4" to listOf("cve.so", "kernelsu.ko", "ksud"),
             "s25-zzi4-classic" to listOf("cve-2026-43499", "cve-2026-43499-root"),
             "s26u-zzhk" to listOf("cve.so", "kernelsu.ko", "ksud"),
+            "s93XX-next" to listOf("cve.so", "kernelsu.ko", "ksud"),
+            "s25-zzhl-next" to listOf("cve.so", "kernelsu.ko", "ksud"),
+            "s25-zzi4-next" to listOf("cve.so", "kernelsu.ko", "ksud"),
+            "s26u-zzhk-next" to listOf("cve.so", "kernelsu.ko", "ksud"),
         )
         for ((dir, files) in mapping) {
             for (name in files) {
@@ -149,7 +158,7 @@ class RootEngine(private val context: Context) {
         installCrashHandler()
         refreshBundledBinaries()
         loadProfiles()
-        if (profiles.isEmpty()) initDefaultProfiles()
+        ensureDefaultProfiles()
         restoreRootedState()
         recoverInterruptedRuns()
         lastCrash()?.let { appendLog("[!] Previous run CRASHED (app):"); it.lineSequence().take(12).forEach { appendLog("    $it") } }
@@ -178,7 +187,7 @@ class RootEngine(private val context: Context) {
         return text.takeIf { it.isNotBlank() }
     }
 
-    fun resetProfiles() { prefs.edit().remove("profiles_json").apply(); profiles.clear(); initDefaultProfiles() }
+    fun resetProfiles() { prefs.edit().remove("profiles_json").apply(); profiles.clear(); ensureDefaultProfiles() }
 
     fun profileByName(name: String?): DeviceProfile? = profiles.firstOrNull { it.name == name }
 
@@ -207,7 +216,8 @@ class RootEngine(private val context: Context) {
                     o.getString("name"), o.optString("kaslrOffset", ""),
                     o.getString("pathSo"), o.getString("pathKo"), o.getString("pathKsud"),
                     o.optString("deviceType", "samsung"),
-                    o.optString("pathCveNormal", null), o.optString("pathCveRoot", null)))
+                    o.optString("pathCveNormal", null), o.optString("pathCveRoot", null),
+                    o.optString("flavor", "kernelsu")))
             }
         }
     }
@@ -217,42 +227,59 @@ class RootEngine(private val context: Context) {
             put("name", p.name); put("kaslrOffset", p.kaslrOffset); put("pathSo", p.pathSo)
             put("pathKo", p.pathKo); put("pathKsud", p.pathKsud); put("deviceType", p.deviceType)
             put("pathCveNormal", p.pathCveNormal); put("pathCveRoot", p.pathCveRoot)
+            put("flavor", p.flavor)
         })
         prefs.edit().putString("profiles_json", arr.toString()).apply()
     }
 
-    private fun initDefaultProfiles() {
+    private data class DefaultSpec(
+        val name: String, val flavor: String, val dir: String,
+        val deviceType: String, val classic: Boolean,
+    )
+
+    /**
+     * Bundled profiles (specs). Profiles are created when MISSING only, so a new
+     * APK with extra profiles (e.g. the KernelSU-Next set) augments existing
+     * installs without touching user-created profiles or edits.
+     */
+    private fun defaultSpecs() = listOf(
+        DefaultSpec("S93XX (Samsung S25)", "kernelsu", "s93XX", "samsung", false),
+        DefaultSpec("Oppo X9", "kernelsu", "oppo", "oppo", false),
+        DefaultSpec("S25 6.6.127 ZZHL", "kernelsu", "s25-zzhl", "samsung", false),
+        DefaultSpec("S25 6.6.127 ZZI4", "kernelsu", "s25-zzi4", "samsung", true),
+        DefaultSpec("S26 Ultra 6.12.69 ZZHK", "kernelsu", "s26u-zzhk", "oppo", false),
+        DefaultSpec("S93XX (Samsung S25) Next", "kernelsu_next", "s93XX-next", "samsung", false),
+        DefaultSpec("S25 6.6.127 ZZHL Next", "kernelsu_next", "s25-zzhl-next", "samsung", false),
+        DefaultSpec("S25 6.6.127 ZZI4 Next", "kernelsu_next", "s25-zzi4-next", "samsung", true),
+        DefaultSpec("S26 Ultra 6.12.69 ZZHK Next", "kernelsu_next", "s26u-zzhk-next", "oppo", false),
+    )
+
+    private fun ensureDefaultProfiles() {
         val extDir = context.getExternalFilesDir(null) ?: return
-        fun asset(src: String, dir: String, name: String): File? {
-            val d = File(extDir, dir).apply { mkdirs() }
-            return copyAssetToFile(src, File(d, name))
+        var changed = false
+        for (spec in defaultSpecs()) {
+            if (profiles.any { it.name == spec.name }) continue
+            val dir = File(extDir, spec.dir).apply { mkdirs() }
+            val so = copyAssetToFile("profiles/${spec.dir}/cve.so", File(dir, "cve.so")) ?: continue
+            val ko = copyAssetFromFile("profiles/${spec.dir}/kernelsu.ko", File(dir, "kernelsu.ko")) ?: continue
+            val ksud = copyAssetFromFile("profiles/${spec.dir}/ksud", File(dir, "ksud")) ?: continue
+            var cn: File? = null
+            var cr: File? = null
+            if (spec.classic) {
+                cn = copyAssetFromFile("profiles/s25-zzi4-classic/cve-2026-43499", File(dir, "cve-classic"))
+                cr = copyAssetFromFile("profiles/s25-zzi4-classic/cve-2026-43499-root", File(dir, "cve-root"))
+            }
+            profiles.add(DeviceProfile(
+                spec.name, "", so.absolutePath, ko.absolutePath, ksud.absolutePath,
+                spec.deviceType, cn?.absolutePath, cr?.absolutePath, spec.flavor))
+            changed = true
         }
-        val s93So = asset("profiles/s93XX/cve.so", "s93XX", "cve.so")
-        val s93Ko = asset("profiles/s93XX/kernelsu.ko", "s93XX", "kernelsu.ko")
-        val s93Ksud = asset("profiles/s93XX/ksud", "s93XX", "ksud")
-        if (s93So != null && s93Ko != null && s93Ksud != null) profiles.add(DeviceProfile("S93XX (Samsung S25)", "", s93So.absolutePath, s93Ko.absolutePath, s93Ksud.absolutePath, "samsung", null, null))
-        val oppoSo = asset("profiles/oppo/cve.so", "oppo", "cve.so")
-        val oppoKo = asset("profiles/oppo/kernelsu.ko", "oppo", "kernelsu.ko")
-        val oppoKsud = asset("profiles/oppo/ksud", "oppo", "ksud")
-        if (oppoSo != null && oppoKo != null && oppoKsud != null) profiles.add(DeviceProfile("Oppo X9", "", oppoSo.absolutePath, oppoKo.absolutePath, oppoKsud.absolutePath, "oppo", null, null))
-        val zzhlSo = asset("profiles/s25-zzhl/cve.so", "s25-zzhl", "cve.so")
-        val zzhlKo = asset("profiles/s25-zzhl/kernelsu.ko", "s25-zzhl", "kernelsu.ko")
-        val zzhlKsud = asset("profiles/s25-zzhl/ksud", "s25-zzhl", "ksud")
-        if (zzhlSo != null && zzhlKo != null && zzhlKsud != null) profiles.add(DeviceProfile("S25 6.6.127 ZZHL", "", zzhlSo.absolutePath, zzhlKo.absolutePath, zzhlKsud.absolutePath, "samsung", null, null))
-        val zzi4Dir = File(extDir, "s25-zzi4").apply { mkdirs() }
-        val zzi4So = copyAssetToFile("profiles/s25-zzi4/cve.so", File(zzi4Dir, "cve.so"))
-        val zzi4Ko = copyAssetToFile("profiles/s25-zzi4/kernelsu.ko", File(zzi4Dir, "kernelsu.ko"))
-        val zzi4Ksud = copyAssetToFile("profiles/s25-zzi4/ksud", File(zzi4Dir, "ksud"))
-        val zzi4Cn = copyAssetToFile("profiles/s25-zzi4-classic/cve-2026-43499", File(zzi4Dir, "cve-classic"))
-        val zzi4Cr = copyAssetToFile("profiles/s25-zzi4-classic/cve-2026-43499-root", File(zzi4Dir, "cve-root"))
-        if (zzi4So != null && zzi4Ko != null && zzi4Ksud != null) profiles.add(DeviceProfile("S25 6.6.127 ZZI4", "", zzi4So.absolutePath, zzi4Ko.absolutePath, zzi4Ksud.absolutePath, "samsung", zzi4Cn?.absolutePath, zzi4Cr?.absolutePath))
-        val s26uDir = File(extDir, "s26u-zzhk").apply { mkdirs() }
-        val s26uSo = copyAssetToFile("profiles/s26u-zzhk/cve.so", File(s26uDir, "cve.so"))
-        val s26uKo = copyAssetToFile("profiles/s26u-zzhk/kernelsu.ko", File(s26uDir, "kernelsu.ko"))
-        val s26uKsud = copyAssetToFile("profiles/s26u-zzhk/ksud", File(s26uDir, "ksud"))
-        if (s26uSo != null && s26uKo != null && s26uKsud != null) profiles.add(DeviceProfile("S26 Ultra 6.12.69 ZZHK", "", s26uSo.absolutePath, s26uKo.absolutePath, s26uKsud.absolutePath, "oppo", null, null))
-        saveProfiles()
+        if (changed) saveProfiles()
     }
+
+    private fun copyAssetFromFile(assetPath: String, destFile: File): File? =
+        copyAssetToFile(assetPath, destFile)
+
     fun copyAssetToFile(assetPath: String, destFile: File): File? {
         return try {
             context.assets.open(assetPath).use { i -> FileOutputStream(destFile).use { o -> i.copyTo(o) } }
@@ -444,8 +471,10 @@ class RootEngine(private val context: Context) {
     // KernelSU manager app (external): force-stop + relaunch after a run
     // ---------------------------------------------------------------------
 
-    fun isKsuManagerInstalled(): Pair<Boolean, String> {
-        for (pkg in listOf("me.weishu.kernelsu", "me.weishu.kernelsu.pr")) {
+    fun isKsuManagerInstalled(next: Boolean = false): Pair<Boolean, String> {
+        val packages = if (next) listOf("com.rifsxd.ksunext", "com.rifsxd.ksunext.debug")
+        else listOf("me.weishu.kernelsu", "me.weishu.kernelsu.pr")
+        for (pkg in packages) {
             if (runCatching { context.packageManager.getPackageInfo(pkg, 0) }.isSuccess) return true to pkg
         }
         return false to ""

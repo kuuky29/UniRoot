@@ -13,6 +13,8 @@
     <string name="soc_label">SoC</string>
     <string name="kernel_label">Kernel</string>
     <string name="profile_label">Profile</string>
+    <string name="flavor_kernelsu">KernelSU</string>
+    <string name="flavor_ksunext">KernelSU Next</string>
     <string name="shizuku_label">Shizuku mode (UID 2000)</string>
     <string name="shizuku_summary">Required for S26 Ultra. Run the exploit as shell instead of the app.</string>
     <string name="log_title">Execution log</string>
