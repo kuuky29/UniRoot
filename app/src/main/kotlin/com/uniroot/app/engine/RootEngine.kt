@@ -587,6 +587,16 @@ class RootEngine(private val context: Context) {
 
         var profile = rawProfile
 
+        // Un module KernelSU déjà chargé (root classic réussi plus tôt dans ce
+        // boot) laisse ses hooks syscall actifs : ils faussent la course
+        // pselect/futex du payload, qui rate alors sa fenêtre d'écriture.
+        // Tester un profil Next exige un boot vierge.
+        if (ksuModuleLoaded()) {
+            appendLog("[!] Module KernelSU déjà chargé sur ce boot (root déjà actif).")
+            appendLog("[!] Ses hooks syscall faussent la course du payload.")
+            appendLog("[!] Pour tester proprement ce profil : REBOOTE d'abord, puis relance.")
+        }
+
         // Profil Samsung sans fichiers avancés : SEUL le mode Local est validé
         // (helper --run-payload + oracle physique). On ignore le toggle Shizuku.
         var useShizuku = useShizukuParam
@@ -667,10 +677,9 @@ class RootEngine(private val context: Context) {
                     if (isNext) {
                         appendLog("[KernelSU] Next ksud is all-in-one (embedded module) — no external .ko staged.")
                         if (profile.name.startsWith("S25") || profile.name.startsWith("S93")) {
-                            appendLog("[KernelSU] S25 Next: staging the compatible custom KDP build.")
-                            appendLog("[!] Note: its embedded android15-6.6 module is the classic KernelSU one for now")
-                            appendLog("[!] (the official Next module freezes Samsung KDP kernels at init).")
-                            appendLog("[!] The classic manager will be relaunched after root.")
+                            appendLog("[KernelSU] S25 Next: custom KDP build (no-patch-text + kprobe fallback).")
+                            appendLog("[KernelSU] Its embedded android15-6.6 module is the fixed Next build:")
+                            appendLog("[KernelSU] dispatcher failure now fails closed — Samsung fallback hooks engage.")
                         }
                     }
                     val koStage = if (isNext) "" else "cp ${profile.pathKo} /data/local/tmp/kernelsu.ko && "
