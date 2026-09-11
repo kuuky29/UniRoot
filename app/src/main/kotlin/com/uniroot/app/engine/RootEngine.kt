@@ -667,7 +667,10 @@ class RootEngine(private val context: Context) {
                     if (isNext) {
                         appendLog("[KernelSU] Next ksud is all-in-one (embedded module) — no external .ko staged.")
                         if (profile.name.startsWith("S25") || profile.name.startsWith("S93")) {
-                            appendLog("[KernelSU] S25 Next: custom KDP build (KernelSU-Next 3.3.0 + Samsung KDP/DEFEX patch).")
+                            appendLog("[KernelSU] S25 Next: staging the compatible custom KDP build.")
+                            appendLog("[!] Note: its embedded android15-6.6 module is the classic KernelSU one for now")
+                            appendLog("[!] (the official Next module freezes Samsung KDP kernels at init).")
+                            appendLog("[!] The classic manager will be relaunched after root.")
                         }
                     }
                     val koStage = if (isNext) "" else "cp ${profile.pathKo} /data/local/tmp/kernelsu.ko && "
