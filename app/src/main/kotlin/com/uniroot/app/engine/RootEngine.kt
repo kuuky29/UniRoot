@@ -65,11 +65,6 @@ class RootEngine(private val context: Context) {
         get() = prefs.getString("ksu_flavor", "kernelsu") ?: "kernelsu"
         set(value) = prefs.edit().putString("ksu_flavor", value).apply()
 
-    /** Home-page "Switch" button (unload + late-load the other flavor, no re-exploit). */
-    var ksuSwitchEnabled: Boolean
-        get() = prefs.getBoolean("ksu_switch_enabled", false)
-        set(value) = prefs.edit().putBoolean("ksu_switch_enabled", value).apply()
-
     fun latestKsuTag(): String = prefs.getString("latest_ksu_tag", "") ?: ""
 
     fun setLatestKsuTag(tag: String) = prefs.edit().putString("latest_ksu_tag", tag).apply()
@@ -313,89 +308,13 @@ class RootEngine(private val context: Context) {
         _rooted.value = true
     }
 
-    /** Flavor of the KernelSU module currently loaded (recorded at root time). */
+    /** Flavor of the KernelSU module currently loaded (recorded at root time) — used by auto-root. */
     fun loadedKsuFlavor(): String? = prefs.getString("loaded_flavor", null)
 
-    fun setLoadedKsuFlavor(flavor: String) = prefs.edit().putString("loaded_flavor", flavor).apply()
 
-    /** Root shell through the currently loaded module's su (asks the manager on first use). */
-    fun runSuCommand(cmd: String, timeoutMs: Long = 15_000L): String = runCatching {
-        val p = ProcessBuilder("su", "-c", cmd).redirectErrorStream(true).start()
-        val output = StringBuilder()
-        val reader = Thread {
-            runCatching {
-                BufferedReader(InputStreamReader(p.inputStream)).use { r ->
-                    var line: String?
-                    while (r.readLine().also { line = it } != null) {
-                        synchronized(output) { output.append(line).append('\n') }
-                    }
-                }
-            }
-        }
-        reader.isDaemon = true
-        reader.start()
-        val finished = p.waitFor(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
-        if (!finished) p.destroy()
-        reader.join(2_000L)
-        synchronized(output) { output.toString().trim() }
-    }.getOrDefault("")
 
-    /**
-     * Switches the loaded KernelSU flavor WITHOUT re-running the exploit:
-     * unload the current module with its own ksud, then late-load the target
-     * flavor's ksud. Requires su to be granted to Uni-Root by the currently
-     * loaded module (its manager shows the prompt on first use).
-     */
-    suspend fun switchKsuFlavor(targetFlavor: String): String = withContext(Dispatchers.IO) {
-        val targetProfile = profiles.firstOrNull { it.flavor == targetFlavor }
-            ?: return@withContext "No profile found for flavor $targetFlavor"
-        val loadedFlavor = loadedKsuFlavor()
-        if (loadedFlavor == targetFlavor) return@withContext "Already running $targetFlavor"
 
-        // 1. Root channel through the currently loaded module's su.
-        //    Works both directions: Next module -> Next manager prompt,
-        //    classic module -> classic manager prompt.
-        appendLog("[Switch] Requesting root through the loaded module…")
-        var id = runSuCommand("id", timeoutMs = 30_000L)
-        if (!id.contains("uid=0")) {
-            delay(2_000L)
-            id = runSuCommand("id", timeoutMs = 30_000L)
-        }
-        if (!id.contains("uid=0")) {
-            return@withContext "Root not granted yet — allow Uni-Root in the " +
-                (if (loadedFlavor == "kernelsu_next") "KernelSU Next" else "KernelSU") +
-                " manager prompt, then press Switch again"
-        }
-        appendLog("[Switch] Root channel OK (${id.lineSequence().firstOrNull() ?: ""})")
 
-        // 2. Unload the current module with ITS OWN ksud (same project only).
-        if (loadedFlavor != null) {
-            val loadedProfile = profiles.firstOrNull { it.flavor == loadedFlavor }
-            val unloadKsud = loadedProfile?.pathKsud ?: return@withContext "Cannot find the loaded flavor's ksud"
-            appendLog("[Switch] Unloading $loadedFlavor module…")
-            val out = runSuCommand("chmod 755 '$unloadKsud' && '$unloadKsud' unload 2>&1; " +
-                "grep -q '^kernelsu ' /proc/modules && echo STILL_LOADED || echo UNLOADED", timeoutMs = 60_000L)
-            if (out.contains("STILL_LOADED")) {
-                appendLog("[Switch] $out")
-                return@withContext "Unload failed — reboot required before switching"
-            }
-            appendLog("[Switch] $out")
-        }
-
-        // 3. Stage and late-load the target flavor's ksud (all-in-one builds).
-        val newKsud = ksudPathForRun(targetProfile)
-        appendLog("[Switch] Late-loading ${targetProfile.name} ksud…")
-        val pkg = if (targetFlavor == "kernelsu_next") "com.rifsxd.ksunext" else "me.weishu.kernelsu"
-        runSuCommand("cp '$newKsud' /data/local/tmp/ksud-switch && chmod 755 /data/local/tmp/ksud-switch", timeoutMs = 30_000L)
-        val loadOut = runSuCommand("/data/local/tmp/ksud-switch late-load --package-name $pkg 2>&1", timeoutMs = 120_000L)
-        appendLog("[Switch] $loadOut")
-        val loaded = runSuCommand("grep -q '^kernelsu ' /proc/modules && echo LOADED || echo MISSING")
-        if (!loaded.contains("LOADED")) return@withContext "Late-load failed — the new module did not load"
-
-        setLoadedKsuFlavor(targetFlavor)
-        _rooted.value = true
-        "Switched to $targetFlavor — root active"
-    }
 
     fun clearRootedFlag() {
         prefs.edit().remove("rooted_profiles").apply()

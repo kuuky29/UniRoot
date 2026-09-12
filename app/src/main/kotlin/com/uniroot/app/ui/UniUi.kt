@@ -129,9 +129,6 @@ data class UniUiState(
     val usePatchedKsud: Boolean = false,
     val patchedKsudName: String = "",
     val autoRootOnBoot: Boolean = false,
-    val ksuSwitchEnabled: Boolean = false,
-    val loadedKsuFlavor: String? = null,
-    val selectedFlavor: String = "kernelsu",
     val rmgStatus: String = "",
     val ksuNextMode: Boolean = false,
     val runLogs: List<RunLogFile> = emptyList(),
@@ -156,8 +153,6 @@ interface UniActions {
     fun onUsePatchedKsudChanged(enabled: Boolean)
     fun onInstallPatchedKsud(file: File)
     fun onAutoRootChanged(enabled: Boolean)
-    fun onKsuSwitchChanged(enabled: Boolean)
-    fun onSwitchKsu()
     fun onCheckRmg()
     fun onRunLogOpen(file: RunLogFile)
     fun onRunLogShare(file: RunLogFile)
@@ -569,15 +564,7 @@ private fun ControlPanel(
             onSelect = actions::onKsuFlavorChanged,
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
         )
-        if (state.ksuSwitchEnabled && state.loadedKsuFlavor != null && state.loadedKsuFlavor != state.selectedFlavor) {
-            val targetName = if (state.selectedFlavor == "kernelsu_next") "KernelSU Next" else "KernelSU"
-            TextButton(
-                text = stringResource(R.string.ksu_switch_button, targetName),
-                onClick = actions::onSwitchKsu,
-                colors = ButtonDefaults.textButtonColorsPrimary(),
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-            )
-        }
+
         if (state.profiles.isNotEmpty()) {
             Card(modifier = modifier.padding(top = 12.dp)) {
                 OverlaySpinnerPreference(
@@ -958,14 +945,6 @@ private fun AdvancedOptions(
                     )
                 }
             }
-        }
-        Card(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
-            SwitchPreference(
-                checked = state.ksuSwitchEnabled,
-                onCheckedChange = actions::onKsuSwitchChanged,
-                title = stringResource(R.string.ksu_switch_enable),
-                summary = stringResource(R.string.ksu_switch_enable_summary),
-            )
         }
         Card(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
             SwitchPreference(
