@@ -229,7 +229,7 @@ class AutoRootService : Service() {
      * THE single notification: foreground service + promoted live activity
      * (Android 16 ProgressStyle -> Samsung Now Bar) + Stop action.
      */
-    private fun postLive(progress: Int, text: String, withStop: Boolean) {
+    private fun postLive(progress: Int, text: String, withStop: Boolean) = runCatching {
         val manager = getSystemService(NotificationManager::class.java)
         if (manager.getNotificationChannel(CHANNEL) == null) {
             manager.createNotificationChannel(
@@ -240,6 +240,7 @@ class AutoRootService : Service() {
             .setContentTitle("Uni-Root — auto-root")
             .setContentText(text)
             .setOngoing(true)
+            .setCategory(Notification.CATEGORY_NAVIGATION)
         if (android.os.Build.VERSION.SDK_INT >= 36) {
             builder.setStyle(
                 Notification.ProgressStyle()
@@ -266,25 +267,44 @@ class AutoRootService : Service() {
                 ).build(),
             )
         }
-        val notif = builder.build()
+        // Samsung Now Bar: proprietary ongoing-activity metadata + semFlags chip
+        // flag 32768 (reverse-engineered by NowbarMeter; harmless elsewhere).
+        val samsungExtras = android.os.Bundle().apply {
+            putInt("android.ongoingActivityNoti.style", 1)
+            putString("android.ongoingActivityNoti.primaryInfo", "Uni-Root")
+            putString("android.ongoingActivityNoti.secondaryInfo", text)
+            putString("android.ongoingActivityNoti.nowbarPrimaryInfo", "Uni-Root")
+            putString("android.ongoingActivityNoti.nowbarSecondaryInfo", text)
+        }
+        builder.addExtras(samsungExtras)
+        builder.setTicker(text)
+        val notif = applySamsungChipHack(builder.build())
         lastBuilt = notif
-        runCatching { manager.notify(NOTIF_ID, notif) }
-    }
+        manager.notify(NOTIF_ID, notif)
+    }.getOrDefault(Unit)
+
+    /** Samsung One UI chip flag (semFlags NOW_BAR = 32768) via reflection. */
+    private fun applySamsungChipHack(notification: Notification): Notification = runCatching {
+        val field = Notification::class.java.getDeclaredField("semFlags")
+        field.isAccessible = true
+        field.setInt(notification, field.getInt(notification) or 32768)
+        notification
+    }.getOrDefault(notification)
 
     private fun updateLive(progress: Int, text: String) {
         postLive(progress, text, withStop = true)
     }
 
     /** Updates the live notification with the final result and detaches it. */
-    private fun postResult(text: String, success: Boolean) {
+    private fun postResult(text: String, success: Boolean) = runCatching {
         val manager = getSystemService(NotificationManager::class.java)
         val builder = Notification.Builder(this, CHANNEL)
             .setSmallIcon(if (success) android.R.drawable.stat_sys_download_done else android.R.drawable.stat_notify_error)
             .setContentTitle(if (success) "Uni-Root — rooted" else "Uni-Root — auto-root failed")
             .setContentText(text)
             .setAutoCancel(true)
-        runCatching { manager.notify(RESULT_NOTIF_ID, builder.build()) }
-    }
+        manager.notify(RESULT_NOTIF_ID, builder.build())
+    }.getOrDefault(Unit)
 
     override fun onDestroy() {
         scope.cancel()

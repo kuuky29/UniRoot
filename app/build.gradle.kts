@@ -6,7 +6,7 @@ plugins {
 }
 
 val appName = "Uni-Root"
-val appVersionName = "4.18"
+val appVersionName = "4.19"
 
 android {
     namespace = "com.uniroot.app"
@@ -19,7 +19,7 @@ android {
         applicationId = "com.example.universalsystemporter"
         minSdk = 31
         targetSdk = 37
-        versionCode = 60
+        versionCode = 61
         versionName = appVersionName
     }
     buildTypes {
