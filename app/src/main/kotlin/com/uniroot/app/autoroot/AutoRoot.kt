@@ -282,6 +282,10 @@ class AutoRootService : Service() {
                 ).build(),
             )
         }
+        val notif = builder.build()
+        lastBuilt = notif
+        manager.notify(NOTIF_ID, notif)
+    }.getOrDefault(Unit)
 
     private fun updateLive(progress: Int, text: String) {
         postLive(progress, text, withStop = true)
