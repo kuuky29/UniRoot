@@ -39,16 +39,15 @@ class AutoRootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
-        val engine = RootEngine(context.applicationContext)
-        engine.initialize()
-        if (!engine.autoRootOnBoot) return
-        val profileName = engine.lastRunProfile() ?: return
-        if (engine.profileByName(profileName) == null) return
-        // Once per boot.
+        // Featherweight: only raw prefs here — heavy init happens in the service IO scope.
+        val prefs = context.getSharedPreferences("uniroot_prefs", Context.MODE_PRIVATE)
+        if (!prefs.getBoolean("auto_root_on_boot", false)) return
+        if (prefs.getString("last_run_profile", null) == null) return
+        if (prefs.getString("profiles_json", null) == null) return
         val bootCount = runCatching {
             AndroidSettings.Global.getInt(context.contentResolver, AndroidSettings.Global.BOOT_COUNT, 0)
         }.getOrDefault(0)
-        if (engine.autoRootBootCount() == bootCount) return
+        if (prefs.getInt("auto_root_boot_count", -1) == bootCount) return
 
         val service = Intent(context, AutoRootService::class.java)
         runCatching { context.startForegroundService(service) }
@@ -80,25 +79,30 @@ class AutoRootService : Service() {
         stopRequested = false
         // Settle phase: the user CAN touch the phone — one guiding toast only.
         toast(getString(R.string.autoroot_start_toast), long = true)
-        postLive(5, getString(R.string.autoroot_preparing), withStop = true)
-        val startNotif = lastBuilt
-        if (startNotif == null) { stopSelf(); return START_NOT_STICKY }
-        startForeground(NOTIF_ID, startNotif)
-        engine = RootEngine(applicationContext)
-        engine.initialize()
-        val profileName = engine.lastRunProfile()
-        val profile = engine.profileByName(profileName)
-        if (profile == null) { stopSelf(); return START_NOT_STICKY }
-
-        // Once-per-boot guard (recorded BEFORE running so a crash also counts).
-        val bootCount = runCatching {
-            AndroidSettings.Global.getInt(contentResolver, AndroidSettings.Global.BOOT_COUNT, 0)
-        }.getOrDefault(0)
-        if (engine.autoRootBootCount() == bootCount) { stopSelf(); return START_NOT_STICKY }
-        engine.setAutoRootBootCount(bootCount)
-
-        val needsShizuku = profile.name.startsWith("S26")
+        ensureChannel()
+        val startNotif = Notification.Builder(this, CHANNEL)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentTitle("Uni-Root")
+            .setContentText(getString(R.string.autoroot_preparing))
+            .setOngoing(true)
+            .build()
+        runCatching { startForeground(NOTIF_ID, startNotif) }
         scope.launch {
+            engine = RootEngine(applicationContext)
+            // Heavy init (profiles, asset refresh, MD5s) on IO — never the main thread.
+            runCatching { engine.initialize() }
+            val profileName = engine.lastRunProfile()
+            val profile = engine.profileByName(profileName)
+            if (profile == null) { stopSelf(); return@launch }
+
+            // Once-per-boot guard (recorded BEFORE running so a crash also counts).
+            val bootCount = runCatching {
+                AndroidSettings.Global.getInt(contentResolver, AndroidSettings.Global.BOOT_COUNT, 0)
+            }.getOrDefault(0)
+            if (engine.autoRootBootCount() == bootCount) { stopSelf(); return@launch }
+            engine.setAutoRootBootCount(bootCount)
+
+            val needsShizuku = profile.name.startsWith("S26")
             var status = "Crash"
             try {
                 updateLive(8, getString(R.string.autoroot_settling))
@@ -229,6 +233,14 @@ class AutoRootService : Service() {
      * THE single notification: foreground service + promoted live activity
      * (Android 16 ProgressStyle -> Samsung Now Bar) + Stop action.
      */
+    private fun ensureChannel() {
+        val manager = getSystemService(NotificationManager::class.java)
+        if (manager.getNotificationChannel(CHANNEL) == null) {
+            manager.createNotificationChannel(
+                NotificationChannel(CHANNEL, "Auto-root", NotificationManager.IMPORTANCE_LOW))
+        }
+    }
+
     private fun postLive(progress: Int, text: String, withStop: Boolean) = runCatching {
         val manager = getSystemService(NotificationManager::class.java)
         if (manager.getNotificationChannel(CHANNEL) == null) {
