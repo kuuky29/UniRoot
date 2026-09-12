@@ -77,8 +77,10 @@
     <string name="patched_ksud_installed">Patched ksud installed</string>
     <string name="auto_root_on_boot">Auto-root on boot</string>
     <string name="autoroot_stop">Stop</string>
-    <string name="autoroot_dont_touch">Don\'t touch the phone until it\'s done</string>
-    <string name="autoroot_run_success">Run succeeded — phone is rooted</string>
+    <string name="autoroot_starting_soon">The root will start automatically in about a minute — check the notification to follow it. You can use the phone for now.</string>
+    <string name="autoroot_dont_touch">Rooting in progress — don\'t touch the phone</string>
+    <string name="autoroot_check_notif">Pull down the notification panel to follow the progress</string>
+    <string name="autoroot_run_success">Success — phone is rooted</string>
     <string name="autoroot_run_failed">Run failed — reboot the phone and try again</string>
     <string name="autoroot_overlay">AUTO-ROOT RUNNING — DO NOT TOUCH THE PHONE</string>
     <string name="autoroot_overlay_running">AUTO-ROOT RUNNING — DO NOT TOUCH THE PHONE UNTIL IT\'S DONE</string>
