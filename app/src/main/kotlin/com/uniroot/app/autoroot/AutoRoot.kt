@@ -13,6 +13,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
+import android.widget.Toast
 import com.uniroot.app.R
 import com.uniroot.app.engine.RootEngine
 import kotlinx.coroutines.CoroutineScope
@@ -21,6 +22,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
 
 /**
@@ -85,6 +87,15 @@ class AutoRootService : Service() {
         val needsShizuku = profile.name.startsWith("S26")
         scope.launch {
             var status = "Crash"
+            // Live "Don't touch the phone" spam at the bottom of the screen —
+            // visible over everything, so no need to open the notifications.
+            val toastSpam = launch(Dispatchers.Main) {
+                while (true) {
+                    Toast.makeText(applicationContext,
+                        getString(R.string.autoroot_dont_touch), Toast.LENGTH_SHORT).show()
+                    delay(5_000L)
+                }
+            }
             try {
                 notify(getString(R.string.autoroot_settling))
                 // Let the system finish booting (selinux loads, vendors up, slab
@@ -118,18 +129,26 @@ class AutoRootService : Service() {
                 }
 
                 showOverlay(getString(R.string.autoroot_overlay_running))
+                showOverlay(getString(R.string.autoroot_overlay_running))
                 notify(getString(R.string.autoroot_running, profile.name))
                 engine.clearLogs()
                 status = engine.runExecutionPipeline(profile, needsShizuku)
-                if (status == "Success") {
-                    engine.refreshRootedLive()
-                    notifyOk(getString(R.string.autoroot_success))
-                } else {
-                    notifyFail(getString(R.string.autoroot_result, status))
+                withContext(Dispatchers.Main) {
+                    if (status == "Success") {
+                        engine.refreshRootedLive()
+                        Toast.makeText(applicationContext,
+                            getString(R.string.autoroot_run_success), Toast.LENGTH_LONG).show()
+                        notifyOk(getString(R.string.autoroot_success))
+                    } else {
+                        Toast.makeText(applicationContext,
+                            getString(R.string.autoroot_run_failed), Toast.LENGTH_LONG).show()
+                        notifyFail(getString(R.string.autoroot_result, status))
+                    }
                 }
             } catch (e: Exception) {
                 notifyFail("Auto-root error: ${e.message}")
             } finally {
+                toastSpam.cancel()
                 hideOverlay()
                 stopForeground(STOP_FOREGROUND_DETACH)
                 stopSelf()

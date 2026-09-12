@@ -243,10 +243,16 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
         lifecycleScope.launch {
             val stopped = engine.forceStopKsuManager(pkg)
             delay(if (stopped) 800L else 200L)
-            val intent = packageManager.getLaunchIntentForPackage(pkg)
-            if (intent != null) {
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                runCatching { startActivity(intent) }
+            // Shizuku `am start` always works (even with the app in background);
+            // the launch-intent path is the fallback.
+            val activity = if (pkg.startsWith("com.rifsxd")) "com.rifsxd.ksunext.ui.MainActivity" else "me.weishu.kernelsu.ui.MainActivity"
+            val started = engine.startManagerViaShizuku(pkg, activity)
+            if (!started) {
+                val intent = packageManager.getLaunchIntentForPackage(pkg)
+                if (intent != null) {
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    runCatching { startActivity(intent) }
+                }
             }
         }
     }
@@ -334,7 +340,7 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
                     // late-load, during the manager force-stop + relaunch.
                     delay(1200)
                     sheetVisible = false
-                    delay(19_000)
+                    delay(12_000)
                     restartKsuManager()
                 }
             } catch (e: Exception) {

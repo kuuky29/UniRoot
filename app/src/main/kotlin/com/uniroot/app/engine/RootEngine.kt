@@ -495,6 +495,12 @@ class RootEngine(private val context: Context) {
         runDiagnosticCommand("am force-stop $pkg", true) == 0
     }
 
+    /** Launches the manager via the Shizuku shell — reliable even from background. */
+    suspend fun startManagerViaShizuku(pkg: String, activity: String): Boolean = withContext(Dispatchers.IO) {
+        if (!shizukuBinderActive() || !shizukuPermissionGranted()) return@withContext false
+        runDiagnosticCommand("am start -n $pkg/$activity", true) == 0
+    }
+
     // ---------------------------------------------------------------------
     // Logs
     // ---------------------------------------------------------------------
