@@ -138,6 +138,10 @@ class AutoRootService : Service() {
                 // Exploit is launching: from here on the phone must NOT be touched.
                 showOverlay(getString(R.string.autoroot_overlay_running))
                 toast(getString(R.string.autoroot_dont_touch_until_done))
+                launch {
+                    delay(8_000L)
+                    toast(getString(R.string.autoroot_take_2min))
+                }
                 updateLive(20, getString(R.string.autoroot_running, profile.name))
                 engine.clearLogs()
                 engine.progressListener = { p, label -> updateLive(p, "Auto-root: $label") }
@@ -252,7 +256,6 @@ class AutoRootService : Service() {
             .setContentTitle("Uni-Root — auto-root")
             .setContentText(text)
             .setOngoing(true)
-            .setCategory(Notification.CATEGORY_NAVIGATION)
         if (android.os.Build.VERSION.SDK_INT >= 36) {
             builder.setStyle(
                 Notification.ProgressStyle()
@@ -279,29 +282,6 @@ class AutoRootService : Service() {
                 ).build(),
             )
         }
-        // Samsung Now Bar: proprietary ongoing-activity metadata + semFlags chip
-        // flag 32768 (reverse-engineered by NowbarMeter; harmless elsewhere).
-        val samsungExtras = android.os.Bundle().apply {
-            putInt("android.ongoingActivityNoti.style", 1)
-            putString("android.ongoingActivityNoti.primaryInfo", "Uni-Root")
-            putString("android.ongoingActivityNoti.secondaryInfo", text)
-            putString("android.ongoingActivityNoti.nowbarPrimaryInfo", "Uni-Root")
-            putString("android.ongoingActivityNoti.nowbarSecondaryInfo", text)
-        }
-        builder.addExtras(samsungExtras)
-        builder.setTicker(text)
-        val notif = applySamsungChipHack(builder.build())
-        lastBuilt = notif
-        manager.notify(NOTIF_ID, notif)
-    }.getOrDefault(Unit)
-
-    /** Samsung One UI chip flag (semFlags NOW_BAR = 32768) via reflection. */
-    private fun applySamsungChipHack(notification: Notification): Notification = runCatching {
-        val field = Notification::class.java.getDeclaredField("semFlags")
-        field.isAccessible = true
-        field.setInt(notification, field.getInt(notification) or 32768)
-        notification
-    }.getOrDefault(notification)
 
     private fun updateLive(progress: Int, text: String) {
         postLive(progress, text, withStop = true)

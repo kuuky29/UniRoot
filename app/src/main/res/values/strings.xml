@@ -78,6 +78,7 @@
     <string name="auto_root_on_boot">Auto-root on boot</string>
     <string name="autoroot_stop">Stop</string>
     <string name="autoroot_start_toast">Root starts in 1 minute — check notification</string>
+    <string name="autoroot_take_2min">This can take up to 2 minutes max — don\'t touch the phone</string>
     <string name="autoroot_dont_touch_until_done">Don\'t touch the phone until it\'s done</string>
     <string name="autoroot_starting_soon">The root will start automatically in about a minute — check the notification to follow it. You can use the phone for now.</string>
     <string name="autoroot_dont_touch">Rooting in progress — don\'t touch the phone</string>
