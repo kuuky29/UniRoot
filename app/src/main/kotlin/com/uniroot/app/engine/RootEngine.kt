@@ -505,6 +505,44 @@ class RootEngine(private val context: Context) {
     // Logs
     // ---------------------------------------------------------------------
 
+    /** Live progress hook (0..100 + label) fed by appendLog markers — used by the auto-root live notification. */
+    var progressListener: ((Int, String) -> Unit)? = null
+    private var lastProgressStage = -1
+    private val progressStages = listOf(
+        20 to "[Pipeline] Start",
+        35 to "p0 pipe oracle prepared",
+        50 to "slide-kaslr-ok",
+        70 to "done=1 root=1",
+        85 to "[Daemon] Preparing ksud",
+        95 to "kernelsu.ko loaded successfully",
+    )
+
+    private fun maybeReportProgress(lines: List<String>) {
+        val listener = progressListener ?: return
+        for ((idx, entry) in progressStages.withIndex()) {
+            val marker = entry.second
+            if (idx > lastProgressStage && lines.any { it.contains(marker) }) {
+                lastProgressStage = idx
+                val label = when (idx) {
+                    0 -> "Starting exploit"
+                    1 -> "Exploit running"
+                    2 -> "KASLR slide found"
+                    3 -> "Kernel access granted"
+                    4 -> "Late-loading KernelSU"
+                    else -> "Finishing KernelSU setup"
+                }
+                listener(20 + idx * 15, label)
+                break
+            }
+        }
+        if (lines.any { it.contains("[Success] Root acquired") }) {
+            lastProgressStage = progressStages.size
+            listener(100, "Root acquired — phone is rooted")
+        }
+    }
+
+    fun resetProgress() { lastProgressStage = -1 }
+
     fun appendLog(msg: String) {
         if (msg.isBlank()) return
         // GhostLock-style: one entry per line so each line carries its own tone.
@@ -513,6 +551,7 @@ class RootEngine(private val context: Context) {
         _logLines.value = _logLines.value + lines
         runCatching { File(context.filesDir, "current_run.log").appendText(lines.joinToString("\n", postfix = "\n")) }
         appendToActiveRunLog(lines)
+        maybeReportProgress(lines)
     }
 
     fun clearLogs() { _logLines.value = emptyList(); runCatching { File(context.filesDir, "current_run.log").delete() } }

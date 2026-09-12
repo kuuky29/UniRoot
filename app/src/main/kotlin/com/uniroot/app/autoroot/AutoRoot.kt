@@ -97,6 +97,7 @@ class AutoRootService : Service() {
                 }
             }
             try {
+                updateLive(5, getString(R.string.autoroot_settling))
                 notify(getString(R.string.autoroot_settling))
                 // Let the system finish booting (selinux loads, vendors up, slab
                 // state sane). The payload itself waits for an allocator quiet
@@ -132,6 +133,10 @@ class AutoRootService : Service() {
                 showOverlay(getString(R.string.autoroot_overlay_running))
                 showOverlay(getString(R.string.autoroot_overlay_running))
                 notify(getString(R.string.autoroot_running, profile.name))
+                liveProgress = 20
+                engine.progressListener = { p, label ->
+                    updateLive(p, "Auto-root: $label")
+                }
                 var runAttempt = 0
                 while (runAttempt < 3 && !stopRequested) {
                     if (runAttempt > 0) {
@@ -159,6 +164,7 @@ class AutoRootService : Service() {
                 notifyFail("Auto-root error: ${e.message}")
             } finally {
                 toastSpam.cancel()
+                engine.progressListener = null
                 hideOverlay()
                 stopForeground(STOP_FOREGROUND_DETACH)
                 stopSelf()
@@ -191,6 +197,7 @@ class AutoRootService : Service() {
     }
 
     private var overlayView: View? = null
+    private var liveProgress = 0
 
     /** Always-on-top banner: "DON'T TOUCH THE PHONE" during the whole auto-root. */
     private fun showOverlay(text: String) {
@@ -230,9 +237,17 @@ class AutoRootService : Service() {
         }
         val builder = Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("Uni-Root")
+            .setContentTitle("Uni-Root — auto-root live")
             .setContentText(text)
             .setOngoing(true)
+        // Android 16 ProgressStyle = the live activity style Samsung's Now Bar /
+        // Live notifications render. Older versions get a plain progress bar.
+        if (android.os.Build.VERSION.SDK_INT >= 36) {
+            val style = Notification.ProgressStyle().setProgress(liveProgress)
+            builder.setStyle(style)
+        } else {
+            builder.setProgress(100, liveProgress, liveProgress in 1..99)
+        }
         if (withStop) {
             val stopIntent = PendingIntent.getService(
                 this, 0,
@@ -252,6 +267,14 @@ class AutoRootService : Service() {
 
     private fun startAsForeground(text: String) {
         runCatching { startForeground(NOTIF_ID, buildNotification(text, withStop = true)) }
+    }
+
+    private fun updateLive(progress: Int, text: String) {
+        liveProgress = progress.coerceIn(0, 100)
+        runCatching {
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.notify(NOTIF_ID, buildNotification("$text", withStop = true))
+        }
     }
 
     private fun notify(text: String) {
