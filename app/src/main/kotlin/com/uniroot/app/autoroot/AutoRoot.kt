@@ -130,9 +130,19 @@ class AutoRootService : Service() {
 
                 showOverlay(getString(R.string.autoroot_overlay_running))
                 showOverlay(getString(R.string.autoroot_overlay_running))
+                showOverlay(getString(R.string.autoroot_overlay_running))
                 notify(getString(R.string.autoroot_running, profile.name))
-                engine.clearLogs()
-                status = engine.runExecutionPipeline(profile, needsShizuku)
+                var runAttempt = 0
+                while (runAttempt < 3 && !stopRequested) {
+                    if (runAttempt > 0) {
+                        notify(getString(R.string.autoroot_retrying, runAttempt))
+                        if (!waitWithCancel(60_000L)) break
+                    }
+                    engine.clearLogs()
+                    status = engine.runExecutionPipeline(profile, needsShizuku)
+                    if (status == "Success" || status == "Reboot required") break
+                    runAttempt++
+                }
                 withContext(Dispatchers.Main) {
                     if (status == "Success") {
                         engine.refreshRootedLive()

