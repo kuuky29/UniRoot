@@ -181,12 +181,16 @@ class AutoRootService : Service() {
     }
 
     private fun notify(text: String) {
+        notifyInternal(text, withStop = true)
+    }
+
+    private fun notifyInternal(text: String, withStop: Boolean) {
         val manager = getSystemService(NotificationManager::class.java)
         if (manager.getNotificationChannel(CHANNEL) == null) {
             manager.createNotificationChannel(
                 NotificationChannel(CHANNEL, "Auto-root", NotificationManager.IMPORTANCE_LOW))
         }
-        runCatching { manager.notify(NOTIF_ID + 1, buildNotification(text, withStop = false)) }
+        runCatching { manager.notify(NOTIF_ID + 1, buildNotification(text, withStop)) }
     }
 
     private fun notifyOk(text: String) = notify(text)

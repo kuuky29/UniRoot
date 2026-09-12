@@ -48,6 +48,8 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
     private var patchedKsudName by mutableStateOf("")
     private var autoRootOnBoot by mutableStateOf(false)
     private var ksuNextMode by mutableStateOf(false)
+    private var ksuSwitchEnabled by mutableStateOf(false)
+    private var loadedKsuFlavor by mutableStateOf<String?>(null)
     private var rmgStatus by mutableStateOf("")
     private var tab by mutableStateOf(UniTab.UNIROOT)
     private var runLogs by mutableStateOf(listOf<RunLogFile>())
@@ -64,6 +66,8 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
         usePatchedKsud = engine.usePatchedKsud
         patchedKsudName = engine.patchedKsudFile()?.name ?: ""
         autoRootOnBoot = engine.autoRootOnBoot
+        ksuSwitchEnabled = engine.ksuSwitchEnabled
+        loadedKsuFlavor = engine.loadedKsuFlavor()
         ksuNextMode = engine.ksuFlavor == "kernelsu_next"
         runLogs = engine.listRunLogs()
         refreshDevice()
@@ -95,6 +99,9 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
                     usePatchedKsud = usePatchedKsud,
                     patchedKsudName = patchedKsudName,
                     autoRootOnBoot = autoRootOnBoot,
+                    ksuSwitchEnabled = ksuSwitchEnabled,
+                    loadedKsuFlavor = loadedKsuFlavor,
+                    selectedFlavor = if (ksuNextMode) "kernelsu_next" else "kernelsu",
                     rmgStatus = rmgStatus,
                     ksuNextMode = ksuNextMode,
                     tab = tab,
@@ -144,6 +151,26 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
                     override fun onUsePatchedKsudChanged(enabled: Boolean) {
                         usePatchedKsud = enabled
                         engine.usePatchedKsud = enabled
+                    }
+                    override fun onKsuSwitchChanged(enabled: Boolean) {
+                        ksuSwitchEnabled = enabled
+                        engine.ksuSwitchEnabled = enabled
+                    }
+                    override fun onSwitchKsu() {
+                        val target = if (ksuNextMode) "kernelsu_next" else "kernelsu"
+                        lifecycleScope.launch {
+                            engine.appendLog("[Switch] Switching to $target…")
+                            val result = engine.switchKsuFlavor(target)
+                            engine.appendLog("[Switch] $result")
+                            loadedKsuFlavor = engine.loadedKsuFlavor()
+                            if (result.contains("root active")) {
+                                Toast.makeText(this@MainActivity, result, Toast.LENGTH_LONG).show()
+                                delay(2_000)
+                                restartKsuManager()
+                            } else {
+                                Toast.makeText(this@MainActivity, result, Toast.LENGTH_LONG).show()
+                            }
+                        }
                     }
                     override fun onAutoRootChanged(enabled: Boolean) {
                         autoRootOnBoot = enabled
