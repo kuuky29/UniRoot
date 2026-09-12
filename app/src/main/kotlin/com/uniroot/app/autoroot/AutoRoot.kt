@@ -8,6 +8,8 @@ import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings as AndroidSettings
 import android.view.Gravity
 import android.view.View
@@ -28,10 +30,10 @@ import rikka.shizuku.Shizuku
 /**
  * Auto-root on boot: BOOT_COMPLETED -> foreground service -> re-run the last
  * used profile once per fresh boot (boot-count guarded). The single ongoing
- * notification is a live activity (Android 16 ProgressStyle -> Samsung Now
- * Bar / Live notifications) tracking the root stages, with a Stop action.
- * While the exploit runs, toasts guide the user: don't touch the phone,
- * pull down the notification panel for live progress.
+ * notification is a promoted live activity (Android 16 ProgressStyle ->
+ * Samsung Now Bar / Live notifications) tracking the root stages, with a
+ * Stop action. Toasts guide the user: "root starts in 1 minute" at boot,
+ * "don't touch the phone" when the exploit runs, and the final result.
  */
 class AutoRootReceiver : BroadcastReceiver() {
 
@@ -55,8 +57,15 @@ class AutoRootReceiver : BroadcastReceiver() {
 
 class AutoRootService : Service() {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var engine: RootEngine
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /** Toast from any thread (posted to the main looper). */
+    private fun toast(text: String, long: Boolean = true) {
+        val duration = if (long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT
+        mainHandler.post { runCatching { Toast.makeText(applicationContext, text, duration).show() } }
+    }
 
     override fun onBind(intent: Intent?) = null
 
@@ -70,11 +79,11 @@ class AutoRootService : Service() {
         }
         stopRequested = false
         // Settle phase: the user CAN touch the phone — one guiding toast only.
-        runCatching {
-            Toast.makeText(this, getString(R.string.autoroot_starting_soon), Toast.LENGTH_LONG).show()
-        }
+        toast(getString(R.string.autoroot_start_toast), long = true)
         postLive(5, getString(R.string.autoroot_preparing), withStop = true)
-        startForeground(NOTIF_ID, lastBuilt!!)
+        val startNotif = lastBuilt
+        if (startNotif == null) { stopSelf(); return START_NOT_STICKY }
+        startForeground(NOTIF_ID, startNotif)
         engine = RootEngine(applicationContext)
         engine.initialize()
         val profileName = engine.lastRunProfile()
@@ -124,17 +133,7 @@ class AutoRootService : Service() {
 
                 // Exploit is launching: from here on the phone must NOT be touched.
                 showOverlay(getString(R.string.autoroot_overlay_running))
-                val toastSpam = launch {
-                    var i = 0
-                    while (true) {
-                        val msg = if (i < 4) getString(R.string.autoroot_dont_touch)
-                        else getString(R.string.autoroot_check_notif)
-                        Toast.makeText(applicationContext, msg, Toast.LENGTH_SHORT).show()
-                        i++
-                        delay(if (i >= 5) 3_000L else 4_000L)
-                        if (i >= 5) i = 0
-                    }
-                }
+                toast(getString(R.string.autoroot_dont_touch_until_done))
                 updateLive(20, getString(R.string.autoroot_running, profile.name))
                 engine.clearLogs()
                 engine.progressListener = { p, label -> updateLive(p, "Auto-root: $label") }
@@ -149,17 +148,14 @@ class AutoRootService : Service() {
                     if (status == "Success" || status == "Reboot required") break
                     runAttempt++
                 }
-                toastSpam.cancel()
+                engine.progressListener = null
 
-                withContext(Dispatchers.Main) {
-                    val msg = if (status == "Success") getString(R.string.autoroot_run_success)
-                    else getString(R.string.autoroot_run_failed)
-                    Toast.makeText(applicationContext, msg, Toast.LENGTH_LONG).show()
-                }
                 if (status == "Success") {
                     engine.refreshRootedLive()
+                    toast(getString(R.string.autoroot_run_success))
                     postResult(getString(R.string.autoroot_run_success), success = true)
                 } else {
+                    toast(getString(R.string.autoroot_run_failed))
                     postResult(getString(R.string.autoroot_run_failed), success = false)
                 }
             } catch (e: Exception) {
@@ -197,7 +193,6 @@ class AutoRootService : Service() {
     }
 
     private var overlayView: View? = null
-    private var liveProgress = 0
     private var lastBuilt: Notification? = null
 
     /** Always-on-top banner shown only while the exploit is actually running. */
@@ -230,7 +225,10 @@ class AutoRootService : Service() {
         overlayView = null
     }
 
-    /** THE single live notification (FGS + progress + Stop). No second notif. */
+    /**
+     * THE single notification: foreground service + promoted live activity
+     * (Android 16 ProgressStyle -> Samsung Now Bar) + Stop action.
+     */
     private fun postLive(progress: Int, text: String, withStop: Boolean) {
         val manager = getSystemService(NotificationManager::class.java)
         if (manager.getNotificationChannel(CHANNEL) == null) {
@@ -243,7 +241,14 @@ class AutoRootService : Service() {
             .setContentText(text)
             .setOngoing(true)
         if (android.os.Build.VERSION.SDK_INT >= 36) {
-            builder.setStyle(Notification.ProgressStyle().setProgress(progress.coerceIn(0, 100)))
+            builder.setStyle(
+                Notification.ProgressStyle()
+                    .setProgress(progress.coerceIn(0, 100))
+            )
+            // Ask the system to promote this notification (Now Bar / lock screen).
+            runCatching { builder.setRequestPromotedOngoing(true) }
+            builder.extras.putBoolean("android.requestPromotedOngoing", true)
+            runCatching { builder.setShortCriticalText(text) }
         } else {
             builder.setProgress(100, progress.coerceIn(0, 100), progress in 1..99)
         }
@@ -267,23 +272,18 @@ class AutoRootService : Service() {
     }
 
     private fun updateLive(progress: Int, text: String) {
-        liveProgress = progress.coerceIn(0, 100)
-        postLive(liveProgress, text, withStop = true)
+        postLive(progress, text, withStop = true)
     }
 
-    /** Writes the final result notification (stays until swiped away). */
+    /** Updates the live notification with the final result and detaches it. */
     private fun postResult(text: String, success: Boolean) {
         val manager = getSystemService(NotificationManager::class.java)
-        if (manager.getNotificationChannel(CHANNEL) == null) {
-            manager.createNotificationChannel(
-                NotificationChannel(CHANNEL, "Auto-root", NotificationManager.IMPORTANCE_LOW))
-        }
         val builder = Notification.Builder(this, CHANNEL)
             .setSmallIcon(if (success) android.R.drawable.stat_sys_download_done else android.R.drawable.stat_notify_error)
             .setContentTitle(if (success) "Uni-Root — rooted" else "Uni-Root — auto-root failed")
             .setContentText(text)
             .setAutoCancel(true)
-        runCatching { manager.notify(NOTIF_ID + 1, builder.build()) }
+        runCatching { manager.notify(RESULT_NOTIF_ID, builder.build()) }
     }
 
     override fun onDestroy() {
@@ -294,6 +294,7 @@ class AutoRootService : Service() {
     companion object {
         private const val CHANNEL = "auto_root"
         private const val NOTIF_ID = 41
+        private const val RESULT_NOTIF_ID = 42
         const val ACTION_STOP = "com.uniroot.app.autoroot.STOP"
         @Volatile var stopRequested = false
     }
