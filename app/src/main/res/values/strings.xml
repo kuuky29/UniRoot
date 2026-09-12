@@ -76,6 +76,16 @@
     <string name="patched_ksud_choose">Choose patched ksud file…</string>
     <string name="patched_ksud_installed">Patched ksud installed</string>
     <string name="auto_root_on_boot">Auto-root on boot</string>
+    <string name="autoroot_stop">Stop</string>
+    <string name="autoroot_preparing">Auto-root: preparing…</string>
+    <string name="autoroot_settling">Auto-root: waiting for boot to settle… (90 s)</string>
+    <string name="autoroot_waiting_shizuku">Auto-root: waiting for Shizuku…</string>
+    <string name="autoroot_shizuku_missing">Shizuku did not start — open Shizuku and run manually</string>
+    <string name="autoroot_permission_missing">Shizuku permission missing — run once manually</string>
+    <string name="autoroot_flavor_changed">Auto-root skipped — the selected KernelSU flavor changed in the app</string>
+    <string name="autoroot_running">Auto-root: running %1$s…</string>
+    <string name="autoroot_success">Auto-root SUCCESS — root is active</string>
+    <string name="autoroot_result">Auto-root %1$s — check the Uni-Root Logs page</string>
     <string name="auto_root_on_boot_summary">Automatically re-runs the last used profile after a reboot (one run per boot). S26 Ultra requires Shizuku "Start on boot" (wireless debugging). Off by default.</string>
     <string name="use_latest_enabled_toast">The next run will use the downloaded binaries if available. Use the download button to fetch them.</string>
 

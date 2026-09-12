@@ -318,10 +318,12 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
                 runLogs = engine.listRunLogs()
                 if (status == "Success") {
                     engine.refreshRootedLive()
-                    // Log sheet closes itself, then the KernelSU manager is
-                    // force-stopped (stale state) and relaunched.
+                    // Log sheet closes itself. The manager is only touched AFTER a
+                    // 20 s settle: both observed freezes happened 14 s after the
+                    // late-load, during the manager force-stop + relaunch.
                     delay(1200)
                     sheetVisible = false
+                    delay(19_000)
                     restartKsuManager()
                 }
             } catch (e: Exception) {
