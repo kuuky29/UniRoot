@@ -80,12 +80,14 @@
     <string name="ksu_switch_button">Switch to %1$s (no re-exploit)</string>
     <string name="auto_root_on_boot">Auto-root on boot</string>
     <string name="autoroot_stop">Stop</string>
+    <string name="autoroot_overlay">AUTO-ROOT RUNNING — DO NOT TOUCH THE PHONE</string>
+    <string name="autoroot_overlay_running">AUTO-ROOT RUNNING — DO NOT TOUCH THE PHONE UNTIL IT\'S DONE</string>
     <string name="autoroot_preparing">Auto-root: preparing…</string>
     <string name="autoroot_settling">Auto-root: waiting for boot to settle… (90 s)</string>
     <string name="autoroot_waiting_shizuku">Auto-root: waiting for Shizuku…</string>
     <string name="autoroot_shizuku_missing">Shizuku did not start — open Shizuku and run manually</string>
     <string name="autoroot_permission_missing">Shizuku permission missing — run once manually</string>
-    <string name="autoroot_flavor_changed">Auto-root skipped — the selected KernelSU flavor changed in the app</string>
+    <string name="autoroot_flavor_changed">Auto-root skipped — the phone is already rooted with the other KernelSU. Reboot to switch flavor.</string>
     <string name="autoroot_running">Auto-root: running %1$s…</string>
     <string name="autoroot_success">Auto-root SUCCESS — root is active</string>
     <string name="autoroot_result">Auto-root %1$s — check the Uni-Root Logs page</string>

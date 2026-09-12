@@ -9,6 +9,10 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings as AndroidSettings
+import android.view.Gravity
+import android.view.View
+import android.view.WindowManager
+import android.widget.TextView
 import com.uniroot.app.R
 import com.uniroot.app.engine.RootEngine
 import kotlinx.coroutines.CoroutineScope
@@ -57,11 +61,13 @@ class AutoRootService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             stopRequested = true
+            hideOverlay()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
         }
         stopRequested = false
+        showOverlay(getString(R.string.autoroot_overlay))
         startAsForeground(getString(R.string.autoroot_preparing))
         engine = RootEngine(applicationContext)
         engine.initialize()
@@ -99,13 +105,19 @@ class AutoRootService : Service() {
                     }
                 }
 
-                // Flavor guard: if the user changed the selected flavor in the app
-                // after the last run, do NOT auto-root the stale one.
-                if (engine.ksuFlavor != profile.flavor) {
-                    notifyFail(getString(R.string.autoroot_flavor_changed))
-                    return@launch
+                // Flavor guard: only block when a DIFFERENT flavor's module is
+                // already loaded (switching then would contaminate the boot).
+                // A phone with NO root at boot always runs normally.
+                if (engine.ksuModuleLoaded()) {
+                    val loaded = engine.loadedKsuFlavor()
+                    if (loaded != null && loaded != profile.flavor) {
+                        hideOverlay()
+                        notifyFail(getString(R.string.autoroot_flavor_changed))
+                        return@launch
+                    }
                 }
 
+                showOverlay(getString(R.string.autoroot_overlay_running))
                 notify(getString(R.string.autoroot_running, profile.name))
                 engine.clearLogs()
                 status = engine.runExecutionPipeline(profile, needsShizuku)
@@ -118,6 +130,7 @@ class AutoRootService : Service() {
             } catch (e: Exception) {
                 notifyFail("Auto-root error: ${e.message}")
             } finally {
+                hideOverlay()
                 stopForeground(STOP_FOREGROUND_DETACH)
                 stopSelf()
             }
@@ -146,6 +159,38 @@ class AutoRootService : Service() {
             delay(5_000L)
         }
         return false
+    }
+
+    private var overlayView: View? = null
+
+    /** Always-on-top banner: "DON'T TOUCH THE PHONE" during the whole auto-root. */
+    private fun showOverlay(text: String) {
+        if (!AndroidSettings.canDrawOverlays(this)) return
+        val wm = getSystemService(WindowManager::class.java)
+        overlayView?.let { runCatching { wm.removeView(it) } }
+        val tv = TextView(this).apply {
+            this.text = text
+            setTextColor(-0x1)
+            setBackgroundColor(0xCC101820.toInt())
+            gravity = Gravity.CENTER
+            setPadding(32, 28, 32, 28)
+            textSize = 16f
+        }
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+            android.graphics.PixelFormat.TRANSLUCENT,
+        )
+        params.gravity = Gravity.TOP
+        runCatching { wm.addView(tv, params) ; overlayView = tv }
+    }
+
+    private fun hideOverlay() {
+        overlayView?.let { v -> runCatching { getSystemService(WindowManager::class.java).removeView(v) } }
+        overlayView = null
     }
 
     private fun buildNotification(text: String, withStop: Boolean): Notification {

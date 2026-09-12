@@ -353,16 +353,20 @@ class RootEngine(private val context: Context) {
         if (loadedFlavor == targetFlavor) return@withContext "Already running $targetFlavor"
 
         // 1. Root channel through the currently loaded module's su.
-        val id = runSuCommand("id")
+        //    Works both directions: Next module -> Next manager prompt,
+        //    classic module -> classic manager prompt.
+        appendLog("[Switch] Requesting root through the loaded module…")
+        var id = runSuCommand("id", timeoutMs = 30_000L)
         if (!id.contains("uid=0")) {
-            runSuCommand("id") // second call: the manager prompt may have been shown meanwhile
-            val retry = runSuCommand("id")
-            if (!retry.contains("uid=0")) {
-                return@withContext "Root not granted yet — allow Uni-Root in the " +
-                    (if (loadedFlavor == "kernelsu_next") "KernelSU Next" else "KernelSU") +
-                    " manager prompt, then press Switch again"
-            }
+            delay(2_000L)
+            id = runSuCommand("id", timeoutMs = 30_000L)
         }
+        if (!id.contains("uid=0")) {
+            return@withContext "Root not granted yet — allow Uni-Root in the " +
+                (if (loadedFlavor == "kernelsu_next") "KernelSU Next" else "KernelSU") +
+                " manager prompt, then press Switch again"
+        }
+        appendLog("[Switch] Root channel OK (${id.lineSequence().firstOrNull() ?: ""})")
 
         // 2. Unload the current module with ITS OWN ksud (same project only).
         if (loadedFlavor != null) {

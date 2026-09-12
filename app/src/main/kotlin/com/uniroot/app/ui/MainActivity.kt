@@ -180,6 +180,17 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
                                 requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
                             }
                         }
+                        // The "DON'T TOUCH THE PHONE" banner needs the overlay permission.
+                        if (enabled && !android.provider.Settings.canDrawOverlays(this@MainActivity)) {
+                            runCatching {
+                                startActivity(
+                                    Intent(
+                                        android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:$packageName"),
+                                    ),
+                                )
+                            }
+                        }
                     }
                     override fun onInstallPatchedKsud(file: File) {
                         val installed = engine.installPatchedKsud(file)
