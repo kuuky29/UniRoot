@@ -658,7 +658,13 @@ class RootEngine(private val context: Context) {
                 // Le payload v10 du S26 est probabiliste : l'hôte peut mourir en
                 // pleine course (SIGSEGV userspace) sans que le kernel plante.
                 // Sur PC on relance la commande à la main — l'app fait pareil.
-                val maxRelaunches = if (profile.name.startsWith("S26")) 4 else 0
+                // Data from run boxes: attempt 1 always fails by design, attempt 2+
+                // finds the slide, and the probabilistic physrw establishment is
+                // ~50/50 per RUN. After a failed run the state clears in ~1 min
+                // (proven: Failed at 00:28 -> Success at 00:29 same boot), so the
+                // app chains full payload relaunches instead of asking the user
+                // to manually re-run — and stops if the pipe budget runs out.
+                val maxRelaunches = 2
                 var relaunches = 0
                 if (profile.deviceType == "samsung" && !profile.pathCveNormal.isNullOrEmpty() && !profile.pathCveRoot.isNullOrEmpty()) {
                     appendLog("[Shizuku] Copying advanced CVEs to /data/local/tmp/...")
@@ -742,6 +748,16 @@ class RootEngine(private val context: Context) {
                         epermSeen = true
                         appendLog("[!] F_SETPIPE_SZ EPERM seen (pipe page pressure) — payload retries internally.")
                     }
+                    // The payload itself refuses to continue when the boot state is
+                    // contaminated (leftover oracle/slab state from previous runs).
+                    // Hammering more attempts on a dirty boot only burns the pipe
+                    // budget: stop immediately and ask for a reboot.
+                    if (currentLog.contains("oracle state dirty")) {
+                        appendLog("[!] Payload reports DIRTY ORACLE STATE — this boot is contaminated.")
+                        appendLog("[!] REBOOT the phone, then run ONCE. Retrying now is useless.")
+                        finalStatus = "Reboot required"
+                        break
+                    }
                     // Procédure validée (SAVE S26U) : UN run par boot. Si le payload
                     // a déjà raté 8 tentatives internes sur CE boot, relancer ne sert
                     // à rien (l'état slab/pipe est contaminé) : on stoppe net.
@@ -789,7 +805,8 @@ class RootEngine(private val context: Context) {
                 attempts = 0
                 hostPid = ""
                 pidReadTries = 0
-                delay(3000)
+                // The dirty-oracle state clears itself in about a minute (measured).
+                delay(60_000L)
                 }
 
                 if (!success && epermSeen && relaunches >= maxRelaunches) {
