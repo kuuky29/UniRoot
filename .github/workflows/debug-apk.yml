@@ -12,8 +12,6 @@ jobs:
   debug-apk:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    env:
-      KSUD_TEST_FIXTURE: ${{ runner.temp }}/ksud-v3.4.2
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -41,6 +39,8 @@ jobs:
       - name: Download verified ksud regression fixture
         shell: bash
         run: |
+          KSUD_TEST_FIXTURE="$RUNNER_TEMP/ksud-v3.4.2"
+          echo "KSUD_TEST_FIXTURE=$KSUD_TEST_FIXTURE" >> "$GITHUB_ENV"
           curl --fail --location --retry 3 --connect-timeout 15 --max-time 120 \
             --output "$KSUD_TEST_FIXTURE" \
             https://github.com/KernelSU-Next/KernelSU-Next/releases/download/v3.4.2/ksud-aarch64-linux-android
