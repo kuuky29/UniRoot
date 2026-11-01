@@ -17,6 +17,17 @@ Made by **kuuky**.
 - **Progress UI** — animated progress bar with live engine stages (IpSec SA → SPI → ksud staged → arming → **Phone rooted ✓**), and a bottom progress popup for the ksud updater. Fully in English.
 - **Root state banner** — clean Rooted / Not rooted banner driven by a live `su -c id` probe (no more false "rooted" after a reboot).
 
+## KernelSU Next update compatibility
+
+This build includes Samsung KDP/DEFEX/RKP modules from GhostSam v0.2.4,
+based on KernelSU Next **3.4.2 / 33355 / UAPI 5**. Their pinned source commits
+and SHA-256 hashes are recorded in
+[`SOURCE.json`](app/src/main/assets/df/samsung-ko/SOURCE.json).
+The updater accepts a Next release only when it matches these modules, and
+compares saved profile bytes so an older module bundle under the same release
+name is replaced. Use the matching 3.4.2 manager. After updating the profile,
+reboot and re-root to replace a kernel module already loaded in memory.
+
 ## Old exploit (slow)
 
 The classic profile pipeline stays untouched: CVE-2026-43499 payloads (local or Shizuku), Root My Galaxy integration, per-device validated profiles (S25 ZZHL/ZZI4, S26 Ultra ZZHK, S93XX, Oppo), profile editor, instant root, and run-log archives.
@@ -26,6 +37,21 @@ The classic profile pipeline stays untouched: CVE-2026-43499 payloads (local or 
 ```sh
 ./gradlew assembleRelease   # -> app/build/outputs/apk/release/
 ```
+
+For a debuggable test build, run `./gradlew testDebugUnitTest assembleDebug`.
+Set `KSUD_TEST_FIXTURE` to the SHA-256-verified official ksud v3.4.2 binary to
+also run the real-binary regression test. The **Debug APK** GitHub Actions
+workflow runs all nine tests with that fixture and uploads a downloadable APK
+for each successful run. Open its run summary for the download and SHA-256.
+Artifacts require GitHub sign-in and are retained for 90 days. CI uses a
+temporary debug signing key, so its APK cannot update an installation signed
+with another key.
+
+Review build for [PR #35](https://github.com/kuuky29/UniRoot/pull/35):
+[download the Debug APK](https://github.com/shedowe19/UniRoot/actions/runs/41330874318/artifacts/13093696209) from the
+[successful test/build run](https://github.com/shedowe19/UniRoot/actions/runs/41330874318)
+at commit `20dafbac040c865d70c6f837afd703fef0f12e49`.
+APK SHA-256: `971c7b6bb5a15640e077b77eeaceee6c47fdb43267e2641320e45c18e005e9ed`.
 
 ## Credits
 

@@ -6,7 +6,7 @@ plugins {
 }
 
 val appName = "Uni-Root"
-val appVersionName = "5.0.0"
+val appVersionName = "5.0.0-ksu-next-3.4.2"
 
 android {
     namespace = "com.uniroot.app"
@@ -19,7 +19,7 @@ android {
         applicationId = "com.example.universalsystemporter"
         minSdk = 31
         targetSdk = 37
-        versionCode = 300
+        versionCode = 301
         versionName = appVersionName
     }
     buildTypes {
@@ -33,6 +33,9 @@ android {
     buildFeatures {
         buildConfig = true
     }
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
     packaging {
         jniLibs {
             useLegacyPackaging = true
@@ -41,6 +44,7 @@ android {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.compose.foundation:foundation:1.12.0")
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
