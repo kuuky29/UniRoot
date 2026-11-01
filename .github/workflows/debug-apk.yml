@@ -1,0 +1,88 @@
+name: Debug APK
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  debug-apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      KSUD_TEST_FIXTURE: ${{ runner.temp }}/ksud-v3.4.2
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Java 25
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+
+      - name: Check Android SDK
+        shell: bash
+        run: |
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -f "$ANDROID_HOME/platforms/android-37.2/android.jar" ||
+                ! -d "$ANDROID_HOME/build-tools/36.0.0" ]]; then
+            "$sdkmanager" "platforms;android-37.2" "build-tools;36.0.0"
+          fi
+          test -f "$ANDROID_HOME/platforms/android-37.2/android.jar"
+          test -x "$ANDROID_HOME/build-tools/36.0.0/aapt"
+
+      - name: Download verified ksud regression fixture
+        shell: bash
+        run: |
+          curl --fail --location --retry 3 --connect-timeout 15 --max-time 120 \
+            --output "$KSUD_TEST_FIXTURE" \
+            https://github.com/KernelSU-Next/KernelSU-Next/releases/download/v3.4.2/ksud-aarch64-linux-android
+          printf '%s  %s\n' \
+            2771a2ae989b522b5d70f3288ad5a2f379488962d09c1fe11e13a745eba89362 \
+            "$KSUD_TEST_FIXTURE" | sha256sum --check --status
+
+      - name: Test and build Debug APK
+        run: ./gradlew --no-daemon --max-workers=2 testDebugUnitTest assembleDebug
+
+      - name: Verify and prepare APK
+        id: package
+        shell: bash
+        run: |
+          apk="$RUNNER_TEMP/UniRoot-debug-$GITHUB_SHA.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$apk"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify "$apk"
+          badging="$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk")"
+          grep -q application-debuggable <<< "$badging"
+          echo "apk=$apk" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(sha256sum "$apk" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Debug APK
+        id: upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ steps.package.outputs.apk }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish download information
+        env:
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          APK_SHA256: ${{ steps.package.outputs.sha256 }}
+        shell: bash
+        run: |
+          {
+            echo '## Debug APK'
+            printf '[Download the Debug APK](%s)\n\n' "$ARTIFACT_URL"
+            printf 'Source commit: `%s`\n\n' "$GITHUB_SHA"
+            printf 'APK SHA-256: `%s`\n\n' "$APK_SHA256"
+            echo 'The download requires GitHub sign-in and is retained for 90 days.'
+            echo 'CI uses a temporary debug signing key; it cannot update an APK signed with another key.'
+          } >> "$GITHUB_STEP_SUMMARY"

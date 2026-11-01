@@ -38,6 +38,15 @@ The classic profile pipeline stays untouched: CVE-2026-43499 payloads (local or 
 ./gradlew assembleRelease   # -> app/build/outputs/apk/release/
 ```
 
+For a debuggable test build, run `./gradlew testDebugUnitTest assembleDebug`.
+Set `KSUD_TEST_FIXTURE` to the SHA-256-verified official ksud v3.4.2 binary to
+also run the real-binary regression test. The **Debug APK** GitHub Actions
+workflow runs all nine tests with that fixture and uploads a downloadable APK
+for each successful run. Open its run summary for the download and SHA-256.
+Artifacts require GitHub sign-in and are retained for 90 days. CI uses a
+temporary debug signing key, so its APK cannot update an installation signed
+with another key.
+
 ## Credits
 
 This app stands on the shoulders of:
