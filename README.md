@@ -47,6 +47,12 @@ Artifacts require GitHub sign-in and are retained for 90 days. CI uses a
 temporary debug signing key, so its APK cannot update an installation signed
 with another key.
 
+Review build for [PR #35](https://github.com/kuuky29/UniRoot/pull/35):
+[download the Debug APK](https://github.com/shedowe19/UniRoot/actions/runs/41330874318/artifacts/13093696209) from the
+[successful test/build run](https://github.com/shedowe19/UniRoot/actions/runs/41330874318)
+at commit `20dafbac040c865d70c6f837afd703fef0f12e49`.
+APK SHA-256: `971c7b6bb5a15640e077b77eeaceee6c47fdb43267e2641320e45c18e005e9ed`.
+
 ## Credits
 
 This app stands on the shoulders of:
