@@ -33,6 +33,7 @@ object DfKsudUpdater {
     private val REPOS_CLASSIC = listOf("tiann/KernelSU", "KernelSU/KernelSU")
     private const val KO_ASSET_DIR = "df/samsung-ko"
     private const val KO_ASSET_DIR_CLASSIC = "df/samsung-ko-classic"
+    private const val NEXT_MODULE_VERSION = "3.4.2"
     private val KMIS = listOf(
         "android12-5.10", "android13-5.10", "android13-5.15", "android14-5.15",
         "android14-6.1", "android15-6.6", "android16-6.12", "android17-6.18")
@@ -189,15 +190,29 @@ object DfKsudUpdater {
         return "" // 5.10/5.15 without tag -> hash resolution (reference)
     }
 
+    /** Only the KernelSU module may be replaced. Other embedded modules
+     * (notably susfs_guard_lkm since Next 3.4.2) share the same vermagic. */
+    private fun isKernelSuModule(payload: ByteArray): Boolean =
+        containsBytes(payload, "\u0000name=kernelsu\u0000".toByteArray())
+
     private fun classify(streams: MutableList<Stream>, refHashes: Map<String, String>) {
         for (s in streams) {
             s.vermagic = vermagicOf(s.payload)
             s.sha = sha256Hex(s.payload)
             if (s.vermagic.isNotEmpty()) {
+                if (!isKernelSuModule(s.payload)) {
+                    s.kind = "other-ko"
+                    continue
+                }
                 s.kind = "ko"
-                val k = kmiFromVermagic(s.vermagic)
-                if (k.isNotEmpty()) { s.kmi = k; s.how = "vermagic" }
-                else refHashes[s.sha]?.let { s.kmi = it; s.how = "reference" }
+                // Exact release hashes take priority over the kernel's
+                // version string, which can omit the Android KMI tag.
+                val reference = refHashes[s.sha]
+                if (reference != null) { s.kmi = reference; s.how = "reference" }
+                else {
+                    val k = kmiFromVermagic(s.vermagic)
+                    if (k.isNotEmpty()) { s.kmi = k; s.how = "vermagic" }
+                }
             } else {
                 s.kind = when {
                     containsBytes(s.payload, "BusyBox".toByteArray()) -> "busybox"
@@ -272,6 +287,11 @@ object DfKsudUpdater {
         say("[*] Latest release: $tag ($repo)")
 
         val version = tag.removePrefix("v")
+        if (!classic) {
+            requireMatchingNextModules(version)
+            say("[*] Samsung kernel modules: v$NEXT_MODULE_VERSION (UAPI 5)")
+            say("[!] Use the KernelSU Next 3.4.2 manager (UAPI 5); an older loaded module changes after reboot and re-root.")
+        }
         // The release's manager APK name carries the VERSION CODE
         // (KernelSU_Next_v3.4.0_33294-release.apk) -> id = "3.4.0-33294".
         val code = Regex("""KernelSU(?:_Next)?_v[\d.]+_(\d+)-release\.apk""").find(releaseJson)
@@ -294,22 +314,35 @@ object DfKsudUpdater {
             "OK: $tag patched -> classic profile '$niceName'"
         } else {
             val profileId = niceName
-            if (alreadyUpdatedNext(context, profileId)) {
+            if (alreadyUpdatedNext(context, profileId, patched)) {
+                KsudNextProfiles.setSelected(context, profileId)
                 progress(100, "you are already updated")
                 say("you are already updated")
                 say("    ($tag is already patched: profile '$profileId')")
                 return "you are already updated ($tag)"
             }
             KsudNextProfiles.addDynamic(context, profileId, patched,
-                "official ksud $tag + Samsung KDP+DEFEX kos - patched on device")
+                "official ksud $tag + Samsung KDP+DEFEX modules v$NEXT_MODULE_VERSION (UAPI 5)")
             say("[+] Profile '$profileId' created and SELECTED")
             progress(100, "Done")
             "OK: $tag patched -> profile '$profileId'"
         }
     }
 
-    private fun alreadyUpdatedNext(context: Context, profileId: String): Boolean =
-        KsudNextProfiles.list(context).any { it.id == profileId }
+    private fun alreadyUpdatedNext(context: Context, profileId: String, patched: ByteArray): Boolean =
+        profileMatches(File(KsudNextProfiles.dynamicDir(context), profileId), patched)
+
+    /** A release ID alone cannot identify which Samsung module bundle it contains. */
+    internal fun profileMatches(file: File, patched: ByteArray): Boolean = runCatching {
+        file.isFile && file.length() == patched.size.toLong() && file.readBytes().contentEquals(patched)
+    }.getOrDefault(false)
+
+    /** Avoid silently combining a future daemon with this build's older modules. */
+    internal fun requireMatchingNextModules(version: String) {
+        check(version.removePrefix("v") == NEXT_MODULE_VERSION) {
+            "No matching Samsung modules for $version. This UniRoot build includes v$NEXT_MODULE_VERSION modules; update UniRoot first."
+        }
+    }
 
     // ------------------------------------------------------------------
     // The COMMON patch pipeline (scan -> inject -> verify)
@@ -331,11 +364,13 @@ object DfKsudUpdater {
         for (kmi in KMIS) {
             val bytes = if (classic) {
                 runCatching { httpGet("$refBase/lkm-aarch64-${kmi}_kernelsu.ko") }
+                    .recoverCatching { httpGet("$refBase/aarch64_${kmi}_kernelsu.ko") }
                     .recoverCatching { httpGet("$refBase/aarch64-${kmi}_kernelsu.ko") }
                     .recoverCatching { httpGet("$refBase/${kmi}_kernelsu.ko") }
                     .getOrNull()
             } else {
-                runCatching { httpGet("$refBase/aarch64-${kmi}_kernelsu.ko") }
+                runCatching { httpGet("$refBase/aarch64_${kmi}_kernelsu.ko") }
+                    .recoverCatching { httpGet("$refBase/aarch64-${kmi}_kernelsu.ko") }
                     .recoverCatching { httpGet("$refBase/${kmi}_kernelsu.ko") }
                     .getOrNull()
             }
@@ -353,8 +388,26 @@ object DfKsudUpdater {
         for (kmi in KMIS) {
             val name = koAssets.firstOrNull { it.startsWith("${kmi}_kernelsu") && it.endsWith(".ko") }
                 ?: throw IllegalStateException("Samsung ko missing from the APK: $kmi")
-            replacements[kmi] = context.assets.open("$koDir/$name").use { it.readBytes() }
+            val raw = context.assets.open("$koDir/$name").use { it.readBytes() }
+            if (!classic) {
+                check(containsBytes(raw, "\u0000v$NEXT_MODULE_VERSION\u0000".toByteArray())) {
+                    "Samsung module $kmi is not v$NEXT_MODULE_VERSION; update UniRoot."
+                }
+            }
+            replacements[kmi] = raw
         }
+
+        return patchAssets(ksud, replacements, refHashes, progress, requireAllModules = !classic)
+    }
+
+    /** Pure binary transformation, also used by the JVM regression tests. */
+    internal fun patchAssets(
+        ksud: ByteArray,
+        replacements: Map<String, ByteArray>,
+        refHashes: Map<String, String>,
+        progress: (Int, String) -> Unit,
+        requireAllModules: Boolean = false,
+    ): ByteArray {
 
         progress(55, "Scanning embedded assets…")
         say("[*] Patching (deflate scan + in-place injection)…")
@@ -386,6 +439,9 @@ object DfKsudUpdater {
             plan.add(Plan(kmi, slot, comp, raw))
         }
         check(plan.isNotEmpty()) { "no patchable slot in this ksud" }
+        check(!requireAllModules || skipped.isEmpty()) {
+            "Missing Samsung module slots: ${skipped.joinToString()}. Check reference downloads; no profile was saved."
+        }
 
         progress(75, "Injecting Samsung kos…")
         for (p in plan) {

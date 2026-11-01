@@ -17,6 +17,17 @@ Made by **kuuky**.
 - **Progress UI** — animated progress bar with live engine stages (IpSec SA → SPI → ksud staged → arming → **Phone rooted ✓**), and a bottom progress popup for the ksud updater. Fully in English.
 - **Root state banner** — clean Rooted / Not rooted banner driven by a live `su -c id` probe (no more false "rooted" after a reboot).
 
+## KernelSU Next update compatibility
+
+This build includes Samsung KDP/DEFEX/RKP modules from GhostSam v0.2.4,
+based on KernelSU Next **3.4.2 / 33355 / UAPI 5**. Their pinned source commits
+and SHA-256 hashes are recorded in
+[`SOURCE.json`](app/src/main/assets/df/samsung-ko/SOURCE.json).
+The updater accepts a Next release only when it matches these modules, and
+compares saved profile bytes so an older module bundle under the same release
+name is replaced. Use the matching 3.4.2 manager. After updating the profile,
+reboot and re-root to replace a kernel module already loaded in memory.
+
 ## Old exploit (slow)
 
 The classic profile pipeline stays untouched: CVE-2026-43499 payloads (local or Shizuku), Root My Galaxy integration, per-device validated profiles (S25 ZZHL/ZZI4, S26 Ultra ZZHK, S93XX, Oppo), profile editor, instant root, and run-log archives.

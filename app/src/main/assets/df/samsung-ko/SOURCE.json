@@ -1,0 +1,137 @@
+{
+  "format_version": 1,
+  "module_version": {
+    "tag": "v3.4.2",
+    "version_code": 33355,
+    "uapi_version": 5
+  },
+  "source_binary": {
+    "repository": "snothin/GhostSam",
+    "commit": "8fa2f68c39119eeea46f059057fecc5f371ee427",
+    "release_tag": "v0.2.4",
+    "path": "app/app/src/main/assets/payloads/ksud/ksud-next",
+    "url": "https://raw.githubusercontent.com/snothin/GhostSam/8fa2f68c39119eeea46f059057fecc5f371ee427/app/app/src/main/assets/payloads/ksud/ksud-next",
+    "sha256": "0b2314432990be5e7bbaef4cdbbcbd6e8bc48fba912289ad7b7f0fea6c908366",
+    "extraction": "Embedded raw DEFLATE streams, extracted without executing the source binary."
+  },
+  "declared_source_fork": {
+    "repository": "snothin/KernelSU-Next",
+    "branch": "samsung",
+    "commit": "d0c143adc26b5af060ccc7266a77009a65c5434a",
+    "provenance": "GhostSam README and NOTICE identify this fork; its samsung branch merges upstream v3.4.2 while retaining Samsung compatibility."
+  },
+  "upstream": {
+    "repository": "KernelSU-Next/KernelSU-Next",
+    "tag": "v3.4.2",
+    "commit": "4c706b5938665866ebe16944a481a7b91e3396af"
+  },
+  "validation": {
+    "static_only": true,
+    "device_test_performed": false,
+    "checks": [
+      "Source binary SHA-256 matches the pinned download.",
+      "Eight uniquely mapped kernelsu ELF modules have matching SHA-256 digests.",
+      "All eight modules contain v3.4.2 and version code 33355.",
+      "All eight modules retain Samsung KDP, DEFEX and RKP compatibility symbols."
+    ],
+    "uapi_provenance": "UAPI 5 is declared by the pinned source-fork merge commit; this manifest does not claim an executed device compatibility test."
+  },
+  "modules": {
+    "android12-5.10": {
+      "asset": "android12-5.10_kernelsu.ko",
+      "sha256": "268a59b587073c5bb556281f346750ab00261a5e461441e012c8dc14a05c5515",
+      "size_bytes": 501552,
+      "vermagic": "5.10.236 SMP preempt mod_unload modversions aarch64",
+      "source_binary_offset": "0x1facb0",
+      "samsung_compatibility_symbols": [
+        "ksu_samsung_kdp_init",
+        "ksu_samsung_defex_init",
+        "ksu_samsung_rkp_init"
+      ]
+    },
+    "android13-5.10": {
+      "asset": "android13-5.10_kernelsu.ko",
+      "sha256": "23567d95e11c191b1134570b96176f3ac5b029b889e56a4be8f0d6a104f6c7e2",
+      "size_bytes": 490496,
+      "vermagic": "5.10.245 SMP preempt mod_unload modversions aarch64",
+      "source_binary_offset": "0x17bd1a",
+      "samsung_compatibility_symbols": [
+        "ksu_samsung_kdp_init",
+        "ksu_samsung_defex_init",
+        "ksu_samsung_rkp_init"
+      ]
+    },
+    "android13-5.15": {
+      "asset": "android13-5.15_kernelsu.ko",
+      "sha256": "ecb29834f3ab74da9c73a324b4280c5cb9c97bf7132d1ba83c9eab73aaa6a8d6",
+      "size_bytes": 521872,
+      "vermagic": "5.15.202-android13-5.15.202_r00-dirty SMP preempt mod_unload modversions aarch64",
+      "source_binary_offset": "0x170d1",
+      "samsung_compatibility_symbols": [
+        "ksu_samsung_kdp_init",
+        "ksu_samsung_defex_init",
+        "ksu_samsung_rkp_init"
+      ]
+    },
+    "android14-5.15": {
+      "asset": "android14-5.15_kernelsu.ko",
+      "sha256": "9c5fafbf337ea54753b0f8344fc3f07188e9fde51ca082fa802b5d3c545684fa",
+      "size_bytes": 648376,
+      "vermagic": "5.15.202-dirty SMP preempt mod_unload modversions aarch64",
+      "source_binary_offset": "0x19c43f",
+      "samsung_compatibility_symbols": [
+        "ksu_samsung_kdp_init",
+        "ksu_samsung_defex_init",
+        "ksu_samsung_rkp_init"
+      ]
+    },
+    "android14-6.1": {
+      "asset": "android14-6.1_kernelsu.ko",
+      "sha256": "489f5cf4b6ef58eb88c9804a03ea7dfa2c2ffb65eb26aabf8726d705d9a3d7d2",
+      "size_bytes": 564216,
+      "vermagic": "6.1.166-dirty SMP preempt mod_unload modversions aarch64",
+      "source_binary_offset": "0x1d59cd",
+      "samsung_compatibility_symbols": [
+        "ksu_samsung_kdp_init",
+        "ksu_samsung_defex_init",
+        "ksu_samsung_rkp_init"
+      ]
+    },
+    "android15-6.6": {
+      "asset": "android15-6.6_kernelsu.ko",
+      "sha256": "edf41fdfd10ad89f7ffce916462440bcdd3857a6269fbf9780cc3476fdfab2cc",
+      "size_bytes": 460912,
+      "vermagic": "6.6.127-4k-g46a034eca005-dirty SMP preempt mod_unload modversions aarch64",
+      "source_binary_offset": "0x21b3ac",
+      "samsung_compatibility_symbols": [
+        "ksu_samsung_kdp_init",
+        "ksu_samsung_defex_init",
+        "ksu_samsung_rkp_init"
+      ]
+    },
+    "android16-6.12": {
+      "asset": "android16-6.12_kernelsu.ko",
+      "sha256": "37303b291a09bb6b58b7a81dc7e69f0fca1d2e7faee987fdece4d681c302fe33",
+      "size_bytes": 524976,
+      "vermagic": "6.12.38-android16-5-p8aa82f3-abogkiS947BXXS4AZHA-4k SMP preempt mod_unload modversions aarch64",
+      "source_binary_offset": "0x3a379",
+      "samsung_compatibility_symbols": [
+        "ksu_samsung_kdp_init",
+        "ksu_samsung_defex_init",
+        "ksu_samsung_rkp_init"
+      ]
+    },
+    "android17-6.18": {
+      "asset": "android17-6.18_kernelsu.ko",
+      "sha256": "f70428e02e1efb45705f506114c6b170e7a46858c71952a48139dfdbb07d6a37",
+      "size_bytes": 493648,
+      "vermagic": "6.18.32-4k-g47cc22554442-dirty SMP preempt mod_unload modversions aarch64",
+      "source_binary_offset": "0x5dcc3",
+      "samsung_compatibility_symbols": [
+        "ksu_samsung_kdp_init",
+        "ksu_samsung_defex_init",
+        "ksu_samsung_rkp_init"
+      ]
+    }
+  }
+}
